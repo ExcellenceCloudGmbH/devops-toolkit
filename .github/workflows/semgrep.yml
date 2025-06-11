@@ -1,0 +1,23 @@
+name: Semgrep Reusable Workflow for lund repos
+
+on:
+  workflow_call:
+    secrets:
+      SEMGREP_APP_TOKEN:
+        required: true
+
+jobs:
+  semgrep:
+    name: Semgrep Static Analysis
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    container:
+      image: returntocorp/semgrep
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep ci
