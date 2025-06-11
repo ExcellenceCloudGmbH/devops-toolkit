@@ -22,4 +22,4 @@ jobs:
 
       - name: Run Semgrep
         run: semgrep ci
-# Register workflow
+
