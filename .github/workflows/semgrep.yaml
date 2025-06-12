@@ -6,7 +6,7 @@ on:
       SEMGREP_APP_TOKEN:
         required: true
 
-permissions:
+permissions:   # give permission to github to PR comment
   contents: read
   pull-requests: write
 
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref }}  # Checkout PR branch cause by default scans main
           fetch-depth: 0
 
       - name: Set up Semgrep and jq
@@ -84,3 +84,10 @@ jobs:
             echo "Failing due to Semgrep findings"
             exit 1
           fi
+
+      - name: Upload Results  # upload json results if needed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
