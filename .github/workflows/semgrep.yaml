@@ -19,6 +19,9 @@ jobs:
       SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud/projects
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
       - name: Set up Semgrep and jq
         run: pip install semgrep jq
