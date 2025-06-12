@@ -9,48 +9,46 @@ on:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    container:
+      image: returntocorp/semgrep
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Semgrep and save JSON
+      - name: Run Semgrep
         run: semgrep ci --json > semgrep-results.json
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-      - name: Fail if vulnerabilities found
+      - name: Count issues
         id: semgrep-check
         run: |
           findings=$(jq '.results | length' semgrep-results.json)
           echo "Semgrep found $findings issue(s)"
           echo "findings=$findings" >> $GITHUB_OUTPUT
-          if [ "$findings" -gt 0 ]; then
-            echo "❌ Vulnerabilities found. Failing pipeline."
-            exit 1
-          fi
+          if [ "$findings" -gt 0 ]; then exit 1; fi
 
-      - name: Comment on PR if issues found
+      - name: Comment on PR
         if: github.event_name == 'pull_request' && steps.semgrep-check.outputs.findings != '0'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const results = JSON.parse(fs.readFileSync('semgrep-results.json', 'utf8')).results;
-            let body = `🔍 **Semgrep found ${results.length} issue(s)**\n\n`;
-            for (const issue of results.slice(0, 10)) {
+            const data = fs.readFileSync('semgrep-results.json', 'utf8');
+            const json = JSON.parse(data);
+            let body = `🔍 **Semgrep found ${json.results.length} issue(s)**\n\n`;
+            for (const issue of json.results.slice(0, 10)) {
               body += `- **${issue.check_id}**: ${issue.message} in \`${issue.path}:${issue.start.line}\`\n`;
             }
-            body += "\n_Only the first 10 results are shown._";
-            await github.rest.issues.createComment({
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
               body: body
             });
 
-      - name: Upload Semgrep JSON results
+      - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
