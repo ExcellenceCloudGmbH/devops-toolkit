@@ -28,16 +28,16 @@ jobs:
         run: |
           findings=$(jq '.results | length' semgrep-results.json)
           echo "Semgrep found $findings issue(s)"
-          echo "findings=$findings" >> $GITHUB_OUTPUT
+          echo "findings=$findings" >> "$GITHUB_ENV"
+          echo "findings=$findings" >> "$GITHUB_OUTPUT"
           if [ "$findings" -gt 0 ]; then
             echo "Vulnerabilities found. Failing the pipeline."
             exit 1
-          else
-            echo "No vulnerabilities found."
           fi
 
+
       - name: Comment on PR if issues found
-        if: github.event_name == 'pull_request' && steps.semgrep-check.outputs.findings != '0'
+        if: github.event_name == 'pull_request' && env.findings != '0'
         uses: actions/github-script@v7
         with:
           script: |
@@ -55,6 +55,7 @@ jobs:
               repo: context.repo.repo,
               body: body
             });
+
 
       - name: Upload Semgrep JSON results
         if: always()
