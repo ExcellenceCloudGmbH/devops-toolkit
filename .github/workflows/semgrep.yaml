@@ -15,7 +15,7 @@ jobs:
     name: Run Semgrep on PR or Push
     runs-on: ubuntu-latest
     env:
-      SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence_cloud/projects/scanning
+      SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud/projects
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +46,6 @@ jobs:
               return;
             }
 
-            // Deduplicate by check_id + path + line
             const uniqueIssuesMap = new Map();
             for (const issue of results.results) {
               const key = `${issue.check_id}::${issue.path}::${issue.start.line}`;
@@ -60,7 +59,8 @@ jobs:
             let body = ` **Semgrep found ${uniqueIssues.length} unique issue(s):**\n\n`;
 
             uniqueIssues.forEach(issue => {
-              body += `- \`${issue.path}:${issue.start.line}\` **${issue.check_id}** - ${issue.message}\n`;
+              const message = issue.message || (issue.extra && issue.extra.message) || "No description available";
+              body += `- \`${issue.path}:${issue.start.line}\` **${issue.check_id}** - ${message}\n`;
             });
 
             body += `\n---\n[View full results on Semgrep Cloud](${process.env.SEMGREP_CLOUD_URL})`;
