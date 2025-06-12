@@ -1,4 +1,4 @@
-name: Semgrep Static Analysis Reusable
+name: Semgrep Reusable Workflow
 
 on:
   workflow_call:
@@ -9,51 +9,16 @@ on:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    env:
-      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          pip install semgrep jq
-
-      - name: Run Semgrep
-        run: semgrep ci --json > semgrep-results.json
-
-      - name: Count Findings and Fail if Needed
-        id: check
-        run: |
-          count=$(jq '.results | length' semgrep-results.json)
-          echo "findings=$count" >> "$GITHUB_OUTPUT"
-          echo "Semgrep found $count issues"
-          if [ "$count" -gt 0 ]; then exit 1; fi
-
-      - name: Comment on PR (if issues found)
-        if: github.event_name == 'pull_request' && steps.check.outputs.findings != '0'
-        uses: actions/github-script@v7
+      - name: Run Semgrep with PR comment
+        uses: returntocorp/semgrep-action@v1
         with:
-          script: |
-            const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('semgrep-results.json', 'utf8'));
-            let body = `🔍 **Semgrep found ${data.results.length} issue(s)**\n\n`;
-            data.results.slice(0, 10).forEach((res) => {
-              body += `- \`${res.path}:${res.start.line}\` - **${res.check_id}**: ${res.message}\n`;
-            });
-            body += "\n_Only showing first 10._";
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body,
-            });
-
-      - name: Upload Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: semgrep-results
-          path: semgrep-results.json
+          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+          comment: true
