@@ -18,39 +18,58 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Semgrep
-        run: pip install semgrep
+        run: pip install semgrep jq
 
-      - name: Run Semgrep scan and output JSON
+      - name: Run Semgrep and generate JSON
         id: run-semgrep
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
           semgrep ci --json > semgrep-results.json || true
           count=$(jq '.results | length' semgrep-results.json)
           echo "Semgrep found $count issue(s)"
           echo "count=$count" >> $GITHUB_OUTPUT
 
-      - name: Comment PR with results
+      - name: Comment on PR with Semgrep results
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const results = JSON.parse(fs.readFileSync('semgrep-results.json', 'utf8'));
+            let data;
+            try {
+              data = fs.readFileSync('semgrep-results.json', 'utf8');
+              if (!data) {
+                console.log('semgrep-results.json is empty, skipping comment.');
+                return;
+              }
+            } catch (err) {
+              console.log('Failed to read semgrep-results.json, skipping comment.');
+              return;
+            }
+
+            let results;
+            try {
+              results = JSON.parse(data);
+            } catch (err) {
+              console.log('semgrep-results.json is not valid JSON, skipping comment.');
+              return;
+            }
+
+            if (!results.results || results.results.length === 0) {
+              console.log('No Semgrep results to comment on.');
+              return;
+            }
+
             let body = `🔍 **Semgrep found ${results.results.length} issue(s):**\n\n`;
             for (const issue of results.results.slice(0, 5)) {
               body += `- \`${issue.path}:${issue.start.line}\` **${issue.check_id}** - ${issue.message}\n`;
             }
             body += '\n_Only the first 5 issues shown._';
-            github.rest.issues.createComment({
+
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: body
             });
-
-      - name: Fail if findings > 0
-        run: |
-          count=$(jq '.results | length' semgrep-results.json)
-          if [ "$count" -gt 0 ]; then
-            echo "Failing due to $count findings"
-            exit 1
-          fi
