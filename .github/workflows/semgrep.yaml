@@ -20,11 +20,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Semgrep
-        run: semgrep ci --json > semgrep-results.json  # Run Semgrep and save results to a JSON file
-
-      - name: Fail if Semgrep found vulnerabilities 
-        run: semgrep ci  # mark the pipeline as "failed" if this step fails
+      - name: Run Semgrep and fail if there is a vulnerability
+        run: semgrep ci --error --json > semgrep-results.json  # Run Semgrep and save results to a JSON file
 
       - name: Upload Semgrep JSON results
         if: always()
