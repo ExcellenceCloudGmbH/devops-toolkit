@@ -14,10 +14,12 @@ jobs:
   semgrep:
     name: Run Semgrep on PR or Push
     runs-on: ubuntu-latest
+    env:
+      SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud/projects/YOUR_PROJECT_NAME
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Semgrep
+      - name: Set up Semgrep and jq
         run: pip install semgrep jq
 
       - name: Run Semgrep and generate JSON
@@ -30,42 +32,38 @@ jobs:
           echo "Semgrep found $count issue(s)"
           echo "count=$count" >> $GITHUB_OUTPUT
 
-      - name: Comment on PR with Semgrep results
+      - name: Comment on PR with all unique Semgrep results and link
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            let data;
-            try {
-              data = fs.readFileSync('semgrep-results.json', 'utf8');
-              if (!data) {
-                console.log('semgrep-results.json is empty, skipping comment.');
-                return;
-              }
-            } catch (err) {
-              console.log('Failed to read semgrep-results.json, skipping comment.');
-              return;
-            }
-
-            let results;
-            try {
-              results = JSON.parse(data);
-            } catch (err) {
-              console.log('semgrep-results.json is not valid JSON, skipping comment.');
-              return;
-            }
+            const data = fs.readFileSync('semgrep-results.json', 'utf8');
+            const results = JSON.parse(data);
 
             if (!results.results || results.results.length === 0) {
               console.log('No Semgrep results to comment on.');
               return;
             }
 
-            let body = `🔍 **Semgrep found ${results.results.length} issue(s):**\n\n`;
-            for (const issue of results.results.slice(0, 5)) {
-              body += `- \`${issue.path}:${issue.start.line}\` **${issue.check_id}** - ${issue.message}\n`;
+            // Deduplicate by check_id + path + line
+            const uniqueIssuesMap = new Map();
+            for (const issue of results.results) {
+              const key = `${issue.check_id}::${issue.path}::${issue.start.line}`;
+              if (!uniqueIssuesMap.has(key)) {
+                uniqueIssuesMap.set(key, issue);
+              }
             }
-            body += '\n_Only the first 5 issues shown._';
+
+            const uniqueIssues = Array.from(uniqueIssuesMap.values());
+
+            let body = `🔍 **Semgrep found ${uniqueIssues.length} unique issue(s):**\n\n`;
+
+            uniqueIssues.forEach(issue => {
+              body += `- \`${issue.path}:${issue.start.line}\` **${issue.check_id}** - ${issue.message}\n`;
+            });
+
+            body += `\n---\n[View full results on Semgrep Cloud](${process.env.SEMGREP_CLOUD_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -73,3 +71,12 @@ jobs:
               issue_number: context.issue.number,
               body: body
             });
+
+      - name: Fail if Semgrep found issues
+        run: |
+          count=$(jq '.results | length' semgrep-results.json)
+          echo "Semgrep found $count issues"
+          if [ "$count" -gt 0 ]; then
+            echo "Failing due to Semgrep findings"
+            exit 1
+          fi
