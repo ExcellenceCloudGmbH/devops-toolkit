@@ -11,21 +11,27 @@ jobs:
   semgrep:
     name: Semgrep Static Analysis
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'   # skip bot scans of depandabot
+    if: github.actor != 'dependabot[bot]'   # skip bot scans from Dependabot
     container:
       image: returntocorp/semgrep
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Semgrep and capture JSON
-        run: semgrep ci --json > semgrep-results.json  # Run Semgrep and save results to a JSON file
-
-      - name: Fail if Semgrep found vulnerabilities
-        run: semgrep ci --error # exit when we have vulnerability
-
+      - name: Run Semgrep and fail on findings if we have vulnerabilities
+        run: |
+          semgrep ci --json > semgrep-results.json
+          findings=$(jq '.results | length' semgrep-results.json) 
+          echo " Semgrep found $findings issue(s)"
+          if [ "$findings" -gt 0 ]; then
+            echo "Vulnerabilities found. Failing the pipeline."
+            exit 1
+          else
+            echo "No vulnerabilities found."
+          fi
 
       - name: Upload Semgrep JSON results
         if: always()
@@ -33,7 +39,6 @@ jobs:
         with:
           name: semgrep-results
           path: semgrep-results.json
-
 
 
 
