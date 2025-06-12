@@ -1,21 +1,58 @@
-# .github/workflows/semgrep.yaml
-name: Semgrep CI
+name: Semgrep Reusable Workflow
 
 on:
   workflow_call:
-    secrets:
-      SEMGREP_APP_TOKEN:
-        required: true
 
 jobs:
   semgrep:
-    name: Semgrep Static Analysis
+    name: Run Semgrep and Comment
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # Required to comment on PR
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
+      - name: Set up Semgrep
+        run: pip install semgrep jq
+
+      - name: Run Semgrep and generate JSON
+        run: semgrep --config=auto --json > semgrep-results.json
+
+      - name: Count and fail on findings
+        id: semgrep_check
+        run: |
+          count=$(jq '.results | length' semgrep-results.json)
+          echo "Semgrep found $count issues"
+          echo "count=$count" >> $GITHUB_OUTPUT
+          if [ "$count" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && steps.semgrep_check.outputs.count != '0'
+        uses: actions/github-script@v7
         with:
-          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('semgrep-results.json', 'utf8'));
+            let body = `🔍 **Semgrep found ${results.results.length} issue(s)**\n\n`;
+            results.results.slice(0, 10).forEach(issue => {
+              body += `- **${issue.check_id}**: ${issue.message} at \`${issue.path}:${issue.start.line}\`\n`;
+            });
+            body += `\n_Only the first 10 issues shown._`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Upload Semgrep results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
