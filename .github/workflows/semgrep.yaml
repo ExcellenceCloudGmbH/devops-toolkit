@@ -24,11 +24,13 @@ jobs:
       - name: Run Semgrep and generate JSON
         run: semgrep ci --json > semgrep-results.json  
 
-      - name: Comment on PR with Semgrep results
+      - name: Run Semgrep + PR Comment
         if: github.event_name == 'pull_request'
-        uses: returntocorp/semgrep-action/comment@v1
+        uses: returntocorp/semgrep-action@v1
         with:
           publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+          comment: true
+
 
       - name: Fail if Semgrep found vulnerabilities
         run: |
