@@ -21,11 +21,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Semgrep and fail on findings if we have vulnerabilities
+      - name: Run Semgrep and generate JSON
+        run: semgrep ci --json > semgrep-results.json  
+
+      - name: Comment on PR with Semgrep results
+        if: github.event_name == 'pull_request'
+        uses: returntocorp/semgrep-action/comment@v1
+        with:
+          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: Fail if Semgrep found vulnerabilities
         run: |
-          semgrep ci --json > semgrep-results.json
-          findings=$(jq '.results | length' semgrep-results.json) 
-          echo " Semgrep found $findings issue(s)"
+          findings=$(jq '.results | length' semgrep-results.json)
+          echo "Semgrep found $findings issue(s)"
           if [ "$findings" -gt 0 ]; then
             echo "Vulnerabilities found. Failing the pipeline."
             exit 1
