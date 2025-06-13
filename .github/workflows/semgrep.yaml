@@ -6,57 +6,54 @@ on:
       SEMGREP_APP_TOKEN:
         required: true
       BOT_PAT:
-        required: true            # PAT for commit comments when we need it
+        required: true        # PAT for commit comments
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: write        # lets GITHUB_TOKEN comment on PRs
 
 jobs:
   semgrep:
-    name: Run Semgrep on PR or Push
     runs-on: ubuntu-latest
     env:
       SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud/projects
-
     steps:
-      
-      - name: Checkout PR branch
+     
+      - name: Checkout PR or branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}     # scan the PR branch
+          ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
      
       - name: Install Semgrep CLI and jq
         run: |
-          pip install semgrep                      
-          sudo apt-get update -qq
-          sudo apt-get -y install jq               
+          pip install semgrep
+          sudo apt-get -qq update
+          sudo apt-get -y install jq
 
      
       - name: Run Semgrep and save JSON
         id: run-semgrep
-        env: { SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }} }
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
           semgrep ci --json > semgrep-results.json || true
           echo "count=$(jq '.results | length' semgrep-results.json)" >> "$GITHUB_OUTPUT"
 
       
-      - name: Comment on PR with unique Semgrep findings
+      - name: Comment on PR with Semgrep findings
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
-        env: { SEMGREP_CLOUD_URL: ${{ env.SEMGREP_CLOUD_URL }} }
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}   # default token
           script: |
             const fs = require('fs');
             const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
+            if (!results.results?.length) return;
 
-            const uniq = [...new Map(
-              (results.results || []).map(i => [
-                `${i.check_id}:${i.path}:${i.start.line}`, i
-              ])
-            ).values()];
+            const uniq = [...new Map(results.results.map(i => [
+              `${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
 
             let body = `**Semgrep found ${uniq.length} unique issue(s):**\n\n`;
             for (const i of uniq) {
@@ -70,22 +67,19 @@ jobs:
               body
             });
 
-      
-      - name: Comment on commit
+    
+      - name: Comment on commit with Semgrep findings
         if: github.event_name != 'pull_request' && steps.run-semgrep.outputs.count != '0'
-        env: { SEMGREP_CLOUD_URL: ${{ env.SEMGREP_CLOUD_URL }} }
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.BOT_PAT }}
+          github-token: ${{ secrets.BOT_PAT }}        # PAT with repo write
           script: |
             const fs = require('fs');
             const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
+            if (!results.results?.length) return;
 
-            const uniq = [...new Map(
-              (results.results || []).map(i => [
-                `${i.check_id}:${i.path}:${i.start.line}`, i
-              ])
-            ).values()];
+            const uniq = [...new Map(results.results.map(i => [
+              `${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
 
             let body = `**Semgrep found ${uniq.length} issue(s):**\n\n`;
             for (const i of uniq) {
@@ -101,14 +95,14 @@ jobs:
               body
             });
 
-     
+      
       - name: Fail if Semgrep found issues
         run: |
           issues=$(jq '.results | length' semgrep-results.json)
           echo "Semgrep found $issues issue(s)"
           [ "$issues" -eq 0 ] || { echo "Failing due to Semgrep findings"; exit 1; }
 
-      
+     
       - name: Upload Semgrep results
         if: always()
         uses: actions/upload-artifact@v4
