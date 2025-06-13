@@ -36,8 +36,8 @@ jobs:
           echo "Semgrep found $count issue(s)"
           echo "count=$count" >> $GITHUB_OUTPUT
 
-      - name: Comment on PR and commit with unique Semgrep results and link
-        if: steps.run-semgrep.outputs.count != '0'
+      - name: Comment on PR with all unique Semgrep results and link
+        if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
         with:
           script: |
@@ -60,7 +60,7 @@ jobs:
 
             const uniqueIssues = Array.from(uniqueIssuesMap.values());
 
-            let body = `**Semgrep found ${uniqueIssues.length} unique issue(s):**\n\n`;
+            let body = ` **Semgrep found ${uniqueIssues.length} unique issue(s):**\n\n`;
 
             uniqueIssues.forEach(issue => {
               const message = issue.message || (issue.extra && issue.extra.message) || "No description available";
@@ -69,21 +69,10 @@ jobs:
 
             body += `\n---\n[View full results on Semgrep Cloud](${process.env.SEMGREP_CLOUD_URL})`;
 
-            // PR comment (if PR)
-            if (context.eventName === 'pull_request') {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
-
-            // Commit comment (always)
-            await github.rest.repos.createCommitComment({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              commit_sha: context.sha,
+              issue_number: context.issue.number,
               body: body
             });
 
