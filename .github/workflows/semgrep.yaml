@@ -6,7 +6,7 @@ on:
       SEMGREP_APP_TOKEN:
         required: true
       BOT_PAT:
-        required: true        # PAT for commit comments
+        required: true        # PAT for commit comment
 
 permissions:
   contents: read
