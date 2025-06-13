@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}  # Checkout PR branch cause by default scans main
+          ref: ${{ github.head_ref }}  # Checkout PR branch cause by default scans main 
           fetch-depth: 0
 
       - name: Set up Semgrep and jq
