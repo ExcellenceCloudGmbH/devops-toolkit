@@ -100,9 +100,9 @@ jobs:
                 commit_sha: sha,
                 body
               });
-              console.log("✅ Comment posted.");
+              console.log(" Comment posted.");
             } catch (error) {
-              console.log("❌ Failed to post comment:", error);
+              console.log("Failed to post comment:", error);
             }
 
 
