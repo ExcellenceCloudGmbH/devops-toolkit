@@ -5,8 +5,8 @@ on:
     secrets:
       SEMGREP_APP_TOKEN:
         required: true
-      BOT_PAT:          # Personal token
-        required: true
+      #BOT_PAT:          # Personal token
+        #required: true
 
 permissions:
   contents: read
