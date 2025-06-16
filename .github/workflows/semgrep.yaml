@@ -74,7 +74,10 @@ jobs:
           script: |
             const fs = require('fs');
             const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
-            if (!results.results?.length) return;
+            if (!results.results?.length) {
+              console.log("No findings");
+              return;
+            }
 
             const uniq = [...new Map(results.results.map(i => [
               `${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
@@ -87,13 +90,21 @@ jobs:
             body += `\n[Full report](${process.env.SEMGREP_CLOUD_URL})`;
 
             const sha = context.payload?.after || context.sha;
-            console.log("Using commit SHA:", sha);
-            await github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: sha,
-              body
-            });
+            console.log("DEBUG: Using commit SHA:", sha);
+            console.log("DEBUG: Repo:", context.repo.owner, "/", context.repo.repo);
+
+            try {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: sha,
+                body
+              });
+              console.log("✅ Comment posted.");
+            } catch (error) {
+              console.log("❌ Failed to post comment:", error);
+            }
+
 
       - name: Fail if Semgrep found issues
         run: |
