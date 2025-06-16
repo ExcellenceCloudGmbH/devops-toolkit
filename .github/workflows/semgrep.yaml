@@ -40,9 +40,8 @@ jobs:
           COUNT=$(jq '.results | length' semgrep-results.json)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
-
-        # GitHub provides an issue.number automatically for PR with semgrep
-        #  context.issue.number  Because PRs already know where to post the comment (on the PR page)
+      # GitHub provides an issue.number automatically for PR with semgrep
+      # context.issue.number  Because PRs already know where to post the comment (on the PR page)
       - name: Comment on PR with Semgrep findings
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
@@ -61,7 +60,12 @@ jobs:
               const msg = i.message || i.extra?.message || 'no description';
               body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
             }
-            body += `\n---\n[View full results on Semgrep Cloud](${process.env.SEMGREP_CLOUD_URL})`;
+
+            const org = "excellence_cloud";
+            const repo = `${context.repo.owner}%2F${context.repo.repo}`;
+            const ref = context.ref;
+            const scanUrl = `https://semgrep.dev/orgs/${org}/findings?repo=${repo}&ref=${ref}`;
+            body += `\n---\n[View full results on Semgrep Cloud](${scanUrl})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -70,30 +74,29 @@ jobs:
               body
             });
 
-      #  SHA We need it to comment on a specific commit 
+      # SHA We need it to comment on a specific commit 
       # context.payload.after (or backup: context.sha)
-      - name: Comment on commit if findings exist
-        if: steps.run-semgrep.outputs.count != '0'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.BOT_PAT }}
-          script: |
-            const fs = require('fs');
-            const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
-            const uniq = [...new Map(results.results.map(i => [`${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
-            let body = `**Semgrep found ${uniq.length} issue(s):**\n\n`;
-            for (const i of uniq) {
-              const msg = i.message || i.extra?.message || 'no description';
-              body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
-            }
-            const sha = context.payload?.after || context.sha;
-            await github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: sha,              
-              body
-            });
-
+      # - name: Comment on commit if findings exist
+      #   if: steps.run-semgrep.outputs.count != '0'
+      #   uses: actions/github-script@v7
+      #   with:
+      #     github-token: ${{ secrets.BOT_PAT }}
+      #     script: |
+      #       const fs = require('fs');
+      #       const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
+      #       const uniq = [...new Map(results.results.map(i => [`${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
+      #       let body = `**Semgrep found ${uniq.length} issue(s):**\n\n`;
+      #       for (const i of uniq) {
+      #         const msg = i.message || i.extra?.message || 'no description';
+      #         body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
+      #       }
+      #       const sha = context.payload?.after || context.sha;
+      #       await github.rest.repos.createCommitComment({
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         commit_sha: sha,              
+      #         body
+      #       });
 
       - name: Fail if Semgrep found issues
         run: |
