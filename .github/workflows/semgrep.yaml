@@ -37,7 +37,9 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
           semgrep ci --json > semgrep-results.json || true
-          echo "count=$(jq '.results | length' semgrep-results.json)" >> "$GITHUB_OUTPUT"
+          COUNT=$(jq '.results | length' semgrep-results.json)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
 
       - name: Comment on PR with Semgrep findings
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
