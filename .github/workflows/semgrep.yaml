@@ -1,11 +1,11 @@
 name: Semgrep reusable scan
 
 on:
-  workflow_call:
+  workflow_call:       # called from another workflow
     secrets:
       SEMGREP_APP_TOKEN:
         required: true
-      BOT_PAT:
+      BOT_PAT:          # Personal token
         required: true
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
       - name: Checkout PR or branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.head_ref || github.ref_name }}         # checkout the right branch
           fetch-depth: 0
 
       - name: Install Semgrep CLI and jq
@@ -31,7 +31,7 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get -y install jq
 
-      - name: Run Semgrep and save JSON
+      - name: Run Semgrep and save JSON                  
         id: run-semgrep
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -41,6 +41,8 @@ jobs:
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
 
+        # GitHub provides an issue.number automatically for PR with semgrep
+        #  context.issue.number  Because PRs already know where to post the comment (on the PR page)
       - name: Comment on PR with Semgrep findings
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
@@ -68,6 +70,8 @@ jobs:
               body
             });
 
+      #  SHA We need it to comment on a specific commit 
+      # context.payload.after (or backup: context.sha)
       - name: Comment on commit if findings exist
         if: steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
@@ -86,7 +90,7 @@ jobs:
             await github.rest.repos.createCommitComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              commit_sha: sha,
+              commit_sha: sha,              
               body
             });
 
