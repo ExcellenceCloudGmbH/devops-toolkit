@@ -81,9 +81,11 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
+          PR=${{ github.event.pull_request.number }}
           curl -s -u "$SONAR_TOKEN:" \
-            "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=coverage,duplicated_lines_density,security_hotspots" \
+            "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&pullRequest=$PR&metricKeys=coverage,duplicated_lines_density,security_hotspots" \
             -o measures.json
+
 
       - name: Fetch Security Hotspots details
         env:
