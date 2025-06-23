@@ -1,0 +1,37 @@
+name: SonarQube + Semgrep Combined Scan 🔎
+
+on:
+  workflow_call:
+    inputs:
+      sonarProjectKey:
+        required: true
+        type: string
+    secrets:
+      SONAR_TOKEN:
+        required: true
+      SONAR_HOST_URL:
+        required: true
+      SEMGREP_APP_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+
+  sonarqube-scan:
+    needs: semgrep-scan
+    uses: ./.github/workflows/sonarqube.yaml
+    with:
+      projectKey: ${{ inputs.sonarProjectKey }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  semgrep-scan:
+    uses: ./.github/workflows/semgrep.yaml
+    secrets:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+
