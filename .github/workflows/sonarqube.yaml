@@ -1,0 +1,133 @@
+name: SonarQube Reusable Scan & Comment
+
+on:
+  workflow_call:
+    inputs:
+      projectKey:
+        required: true
+        type: string
+    secrets:
+      SONAR_TOKEN:
+        required: true
+      SONAR_HOST_URL:
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sonar-pr:
+    runs-on: ubuntu-latest
+
+    env:
+      SONAR_PROJECT_KEY: ${{ inputs.projectKey }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install SonarQube Scanner
+        run: |
+          curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip -q scanner.zip
+
+      - name: Run SonarQube PR Analysis
+        id: scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          PR=${{ github.event.pull_request.number }}
+          SRC=${{ github.event.pull_request.head.ref }}
+          BASE=${{ github.event.pull_request.base.ref }}
+          SHA=${{ github.event.pull_request.head.sha }}
+          ./sonar-scanner-*/bin/sonar-scanner \
+            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.pullrequest.key=$PR \
+            -Dsonar.pullrequest.branch=$SRC \
+            -Dsonar.pullrequest.base=$BASE \
+            -Dsonar.scm.revision=$SHA \
+          2>&1 | tee scan.log
+
+      - name: Wait for analysis report processing
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          TASK_ID=$(grep -o 'api/ce/task?id=[0-9a-f\-]\+' scan.log | head -1 | cut -d= -f2)
+          echo "Found CE task ID: $TASK_ID"
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$TASK_ID" | jq -r .task.status)
+            echo "[$i] CE task status: $STATUS"
+            if [ "$STATUS" = "SUCCESS" ]; then break; fi
+            if [ "$STATUS" = "FAILED" ]; then echo "❌ CE task failed."; exit 1; fi
+            sleep 10
+          done
+
+      - name: Fetch SonarQube Issues for PR
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          PR=${{ github.event.pull_request.number }}
+          curl -s -u "$SONAR_TOKEN:" \
+            "$SONAR_HOST_URL/api/issues/search?componentKeys=$SONAR_PROJECT_KEY&pullRequest=$PR&types=BUG,VULNERABILITY,CODE_SMELL" \
+            -o issues.json
+
+      - name: Format issues with Pro-style UI
+        shell: bash
+        run: |
+          python3 - << 'EOF' > comment.md
+          import json, os
+          from collections import Counter
+
+          event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+          pr = str(event["number"])
+          data = json.load(open('issues.json'))
+          issues = data.get('issues', [])[:30]
+          counts = Counter(i['severity'] for i in issues)
+
+          print(f"## 📝 SonarQube Report for PR #{pr}\n")
+          for sev,color in [('BLOCKER','red'),('CRITICAL','orange'),
+                            ('MAJOR','yellow'),('MINOR','blue'),('INFO','gray')]:
+              print(f"![{sev}](https://img.shields.io/badge/{sev}-{counts.get(sev,0)}-{color})", end=' ')
+          print("\n")
+
+          for sev in ['BLOCKER','CRITICAL','MAJOR','MINOR','INFO']:
+              if counts.get(sev,0)==0: continue
+              print(f"<details><summary>🔍 {sev} ({counts[sev]})</summary>\n")
+              print("| Rule | Location | Message |")
+              print("|---|---|---|")
+              for i in issues:
+                  if i['severity']==sev:
+                      comp=i['component'].split(":")[-1]
+                      line=i.get('line','?')
+                      msg=i['message'].replace('\n',' ')[:120]
+                      print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
+              print("\n</details>\n")
+
+          if not issues:
+              print("🎉 **No new issues found on this PR!**\n")
+
+          host=os.environ['SONAR_HOST_URL']
+          proj=os.environ['SONAR_PROJECT_KEY']
+          print(f"[View full analysis]({host}/dashboard?id={proj}&pullRequest={pr})")
+          EOF
+
+      - name: Comment on PR
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
