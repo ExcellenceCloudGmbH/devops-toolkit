@@ -18,10 +18,11 @@ permissions:
   contents: read
   pull-requests: write
 
-jobs:
 
+
+jobs:
   sonarqube-scan:
-    needs: semgrep-scan
+    needs: semgrep-scan 
     uses: ./.github/workflows/sonarqube.yaml
     with:
       projectKey: ${{ inputs.sonarProjectKey }}
@@ -33,5 +34,4 @@ jobs:
     uses: ./.github/workflows/semgrep.yaml
     secrets:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
 
