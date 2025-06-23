@@ -94,7 +94,7 @@ jobs:
             "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
             -o hotspots.json
 
-      - name: Generate PR comment 
+      - name: Generate PR comment (Badge UI + Collapsible per severity)
         shell: bash
         run: |
           python3 - << 'EOF' > comment.md
@@ -118,18 +118,28 @@ jobs:
           print(f"- ✅ **Coverage**: `{coverage}%`")
           print(f"- ♻️ **Duplicated Code**: `{duplication}%`\n")
 
-          print("### 🛡️ Severity Summary")
-          for sev,color in [('BLOCKER','red'),('CRITICAL','orange'),
-                            ('MAJOR','yellow'),('MINOR','blue'),('INFO','lightgray')]:
-              print(f"![{sev}](https://img.shields.io/badge/{sev}-{counts.get(sev,0)}-{color})", end=' ')
+          print("### 🛡️ Issues by Severity")
+
+          severity_order = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']
+          colors = {
+              'BLOCKER': 'red',
+              'CRITICAL': 'orange',
+              'MAJOR': 'yellow',
+              'MINOR': 'blue',
+              'INFO': 'lightgray'
+          }
+
+          # Print badge icons
+          for sev in severity_order:
+              count = counts.get(sev, 0)
+              print(f"![{sev}](https://img.shields.io/badge/{sev}-{count}-{colors[sev]})", end=' ')
           print("\n")
 
-          print("<details><summary>🔍 View All Issues (grouped by severity)</summary>\n")
-
-          for sev in ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']:
+          # Print collapsible section per severity
+          for sev in severity_order:
               if counts.get(sev, 0) == 0:
                   continue
-              print(f"#### {sev} ({counts[sev]})")
+              print(f"<details><summary>🔍 {sev} – {counts[sev]} issue(s)</summary>\n")
               print("| Rule | File:Line | Message |")
               print("|------|-----------|---------|")
               for i in issues:
@@ -138,14 +148,12 @@ jobs:
                       line = i.get('line', '?')
                       msg = i['message'].replace('\n', ' ')[:140]
                       print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
-              print("\n")
+              print("</details>\n")
 
-          print("</details>\n")
-
-          # Security Hotspots still shown separately
+          # Security Hotspots
           hotspots = json.load(open('hotspots.json')).get('hotspots', [])
           if hotspots:
-              print(f"<details><summary>🚨 **Security Hotspots** ({len(hotspots)})</summary>\n")
+              print(f"<details><summary>🚨 Security Hotspots ({len(hotspots)})</summary>\n")
               print("| Status | Rule | File:Line | Message |")
               print("|--------|------|-----------|---------|")
               for h in hotspots:
@@ -164,6 +172,7 @@ jobs:
           proj = os.environ['SONAR_PROJECT_KEY']
           print(f"\n🔗 [**View full analysis on SonarQube**]({host}/dashboard?id={proj}&pullRequest={pr})")
           EOF
+
 
 
 
