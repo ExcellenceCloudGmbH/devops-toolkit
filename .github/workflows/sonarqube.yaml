@@ -106,7 +106,7 @@ jobs:
           issues = json.load(open('issues.json')).get('issues', [])[:50]
           counts = Counter(i['severity'] for i in issues)
 
-          # Metrics
+          # Quality metrics
           measures = json.load(open('measures.json'))
           ms = {m['metric']: m['value'] for m in measures['component']['measures']}
           coverage = ms.get('coverage', '?')
@@ -132,8 +132,8 @@ jobs:
               count = counts.get(sev, 0)
               if count == 0:
                   continue
-              badge = f"https://img.shields.io/badge/{sev}-{count}-{colors[sev]}"
-              print(f'<details><summary><img src="{badge}" alt="{sev}" height="20"></summary>\n')
+              badge_url = f"https://img.shields.io/badge/{sev}-{count}-{colors[sev]}"
+              print(f'<details><summary><img src="{badge_url}" alt="{sev}" height="20"></summary>\n')
               print("| Rule | File:Line | Message |")
               print("|------|-----------|---------|")
               for i in issues:
@@ -144,10 +144,11 @@ jobs:
                       print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
               print("</details>\n")
 
-          # Security Hotspots (optional, still shown)
+          # Optional: Security Hotspots section
           hotspots = json.load(open('hotspots.json')).get('hotspots', [])
           if hotspots:
-              print(f"<details><summary><img src='https://img.shields.io/badge/Security_Hotspots-{len(hotspots)}-orange' height='20'></summary>\n")
+              badge_url = f"https://img.shields.io/badge/Security_Hotspots-{len(hotspots)}-orange"
+              print(f'<details><summary><img src="{badge_url}" alt="Security Hotspots" height="20"></summary>\n')
               print("| Status | Rule | File:Line | Message |")
               print("|--------|------|-----------|---------|")
               for h in hotspots:
@@ -160,7 +161,7 @@ jobs:
               print("</details>\n")
 
           if not issues and not hotspots:
-              print("\n🎉 **No new issues or hotspots found on this PR! Great job!** 🎉")
+              print("🎉 **No new issues or hotspots found on this PR! Great job!** 🎉")
 
           host = os.environ['SONAR_HOST_URL']
           proj = os.environ['SONAR_PROJECT_KEY']
