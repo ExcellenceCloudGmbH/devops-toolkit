@@ -94,7 +94,7 @@ jobs:
             "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
             -o hotspots.json
 
-      - name: Generate PR comment (Clean & Visual ✨)
+      - name: Generate PR comment 
         shell: bash
         run: |
           python3 - << 'EOF' > comment.md
@@ -124,12 +124,12 @@ jobs:
               print(f"![{sev}](https://img.shields.io/badge/{sev}-{counts.get(sev,0)}-{color})", end=' ')
           print("\n")
 
-          print("---\n")
+          print("<details><summary>🔍 View All Issues (grouped by severity)</summary>\n")
 
           for sev in ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']:
               if counts.get(sev, 0) == 0:
                   continue
-              print(f"<details><summary>🔍 **{sev}** – {counts[sev]} issue(s)</summary>\n")
+              print(f"#### {sev} ({counts[sev]})")
               print("| Rule | File:Line | Message |")
               print("|------|-----------|---------|")
               for i in issues:
@@ -138,8 +138,11 @@ jobs:
                       line = i.get('line', '?')
                       msg = i['message'].replace('\n', ' ')[:140]
                       print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
-              print("</details>\n")
+              print("\n")
 
+          print("</details>\n")
+
+          # Security Hotspots still shown separately
           hotspots = json.load(open('hotspots.json')).get('hotspots', [])
           if hotspots:
               print(f"<details><summary>🚨 **Security Hotspots** ({len(hotspots)})</summary>\n")
@@ -155,12 +158,13 @@ jobs:
               print("</details>\n")
 
           if not issues and not hotspots:
-              print("🎉 **No new issues or hotspots found on this PR! Great job!** 🎉")
+              print("\n🎉 **No new issues or hotspots found on this PR! Great job!** 🎉")
 
           host = os.environ['SONAR_HOST_URL']
           proj = os.environ['SONAR_PROJECT_KEY']
           print(f"\n🔗 [**View full analysis on SonarQube**]({host}/dashboard?id={proj}&pullRequest={pr})")
           EOF
+
 
 
 
