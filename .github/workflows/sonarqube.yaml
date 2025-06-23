@@ -38,7 +38,7 @@ jobs:
       - name: Run SonarQube PR Analysis
         id: scan
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_LUND }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           PR=${{ github.event.pull_request.number }}
           SRC=${{ github.event.pull_request.head.ref }}
@@ -56,7 +56,7 @@ jobs:
 
       - name: Wait for analysis completion
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_LUND }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           TASK_ID=$(grep -o 'api/ce/task?id=[0-9a-f\-]\+' scan.log | head -1 | cut -d= -f2)
           echo "Found CE task ID: $TASK_ID"
@@ -70,7 +70,7 @@ jobs:
 
       - name: Fetch issues for PR
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_LUND }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           PR=${{ github.event.pull_request.number }}
           curl -s -u "$SONAR_TOKEN:" \
@@ -79,7 +79,7 @@ jobs:
 
       - name: Fetch coverage, duplication, hotspots count
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_LUND }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           PR=${{ github.event.pull_request.number }}
           curl -s -u "$SONAR_TOKEN:" \
@@ -89,7 +89,7 @@ jobs:
 
       - name: Fetch Security Hotspots details
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_LUND }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           PR=${{ github.event.pull_request.number }}
           curl -s -u "$SONAR_TOKEN:" \
