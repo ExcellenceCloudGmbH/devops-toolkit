@@ -1,4 +1,4 @@
-name: SonarQube Reusable Scan & Comment
+name: Reusable SonarQube PR Scan & Comment
 
 on:
   workflow_call:
@@ -25,7 +25,7 @@ jobs:
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -54,7 +54,7 @@ jobs:
             -Dsonar.scm.revision=$SHA \
           2>&1 | tee scan.log
 
-      - name: Wait for analysis report processing
+      - name: Wait for analysis completion
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -68,7 +68,7 @@ jobs:
             sleep 10
           done
 
-      - name: Fetch SonarQube Issues for PR
+      - name: Fetch issues for PR
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -77,7 +77,24 @@ jobs:
             "$SONAR_HOST_URL/api/issues/search?componentKeys=$SONAR_PROJECT_KEY&pullRequest=$PR&types=BUG,VULNERABILITY,CODE_SMELL" \
             -o issues.json
 
-      - name: Format issues with Pro-style UI
+      - name: Fetch coverage, duplication, hotspots count
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -s -u "$SONAR_TOKEN:" \
+            "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=coverage,duplicated_lines_density,security_hotspots" \
+            -o measures.json
+
+      - name: Fetch Security Hotspots details
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          PR=${{ github.event.pull_request.number }}
+          curl -s -u "$SONAR_TOKEN:" \
+            "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
+            -o hotspots.json
+
+      - name: Generate PR comment (Pro style)
         shell: bash
         run: |
           python3 - << 'EOF' > comment.md
@@ -86,34 +103,58 @@ jobs:
 
           event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
           pr = str(event["number"])
-          data = json.load(open('issues.json'))
-          issues = data.get('issues', [])[:30]
+
+          issues = json.load(open('issues.json')).get('issues', [])[:30]
           counts = Counter(i['severity'] for i in issues)
 
+          # Metrics
+          measures = json.load(open('measures.json'))
+          ms = {m['metric']: m['value'] for m in measures['component']['measures']}
+          coverage = ms.get('coverage', '?')
+          duplication = ms.get('duplicated_lines_density', '?')
+          hotspot_count = ms.get('security_hotspots', '?')
+
           print(f"## 📝 SonarQube Report for PR #{pr}\n")
-          for sev,color in [('BLOCKER','red'),('CRITICAL','orange'),
-                            ('MAJOR','yellow'),('MINOR','blue'),('INFO','gray')]:
+          print(f"- 🧪 **Coverage**: `{coverage}%`")
+          print(f"- ♻️ **Duplicated Code**: `{duplication}%`")
+
+          for sev,color in [('BLOCKER','red'),('CRITICAL','orange'),('MAJOR','yellow'),('MINOR','blue'),('INFO','gray')]:
               print(f"![{sev}](https://img.shields.io/badge/{sev}-{counts.get(sev,0)}-{color})", end=' ')
           print("\n")
 
           for sev in ['BLOCKER','CRITICAL','MAJOR','MINOR','INFO']:
-              if counts.get(sev,0)==0: continue
+              if counts.get(sev, 0) == 0: continue
               print(f"<details><summary>🔍 {sev} ({counts[sev]})</summary>\n")
               print("| Rule | Location | Message |")
               print("|---|---|---|")
               for i in issues:
-                  if i['severity']==sev:
-                      comp=i['component'].split(":")[-1]
-                      line=i.get('line','?')
-                      msg=i['message'].replace('\n',' ')[:120]
+                  if i['severity'] == sev:
+                      comp = i['component'].split(":")[-1]
+                      line = i.get('line', '?')
+                      msg = i['message'].replace('\n', ' ')[:120]
                       print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
               print("\n</details>\n")
 
-          if not issues:
-              print("🎉 **No new issues found on this PR!**\n")
+          # Security Hotspots detail
+          hotspots = json.load(open('hotspots.json')).get('hotspots', [])
+          if hotspots:
+              print(f"<details><summary>🚨 Security Hotspots ({len(hotspots)})</summary>\n")
+              print("| Status | Rule | Location | Message |")
+              print("|---|---|---|---|")
+              for h in hotspots:
+                  rule = h.get("ruleKey", "unknown")
+                  comp = h["component"].split(":")[-1]
+                  line = h.get("line", "?")
+                  status = h.get("status", "TO_REVIEW")
+                  msg = h.get("message", "No message").replace("\n", " ")[:120]
+                  print(f"| `{status}` | `{rule}` | `{comp}:{line}` | {msg} |")
+              print("\n</details>\n")
 
-          host=os.environ['SONAR_HOST_URL']
-          proj=os.environ['SONAR_PROJECT_KEY']
+          if not issues and not hotspots:
+              print("🎉 **No new issues or hotspots found on this PR!**\n")
+
+          host = os.environ['SONAR_HOST_URL']
+          proj = os.environ['SONAR_PROJECT_KEY']
           print(f"[View full analysis]({host}/dashboard?id={proj}&pullRequest={pr})")
           EOF
 
