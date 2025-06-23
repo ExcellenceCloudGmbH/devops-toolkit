@@ -94,7 +94,7 @@ jobs:
             "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
             -o hotspots.json
 
-      - name: Generate PR comment (Pro style)
+      - name: Generate PR comment (Better UI ✨)
         shell: bash
         run: |
           python3 - << 'EOF' > comment.md
@@ -103,8 +103,7 @@ jobs:
 
           event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
           pr = str(event["number"])
-
-          issues = json.load(open('issues.json')).get('issues', [])[:30]
+          issues = json.load(open('issues.json')).get('issues', [])[:50]
           counts = Counter(i['severity'] for i in issues)
 
           # Metrics
@@ -114,33 +113,43 @@ jobs:
           duplication = ms.get('duplicated_lines_density', '?')
           hotspot_count = ms.get('security_hotspots', '?')
 
-          print(f"## 📝 SonarQube Report for PR #{pr}\n")
-          print(f"- 🧪 **Coverage**: `{coverage}%`")
-          print(f"- ♻️ **Duplicated Code**: `{duplication}%`")
+          print(f"## 🚀 SonarQube Quality Gate Summary for PR #{pr}\n")
+          print("| Metric               | Value       |")
+          print("|----------------------|-------------|")
+          print(f"| ✅ **Coverage**        | `{coverage}%`   |")
+          print(f"| ♻️  **Duplicated Code** | `{duplication}%` |")
+          print(f"| 🔥 **Security Hotspots** | `{hotspot_count}` |")
+          print()
 
-          for sev,color in [('BLOCKER','red'),('CRITICAL','orange'),('MAJOR','yellow'),('MINOR','blue'),('INFO','gray')]:
-              print(f"![{sev}](https://img.shields.io/badge/{sev}-{counts.get(sev,0)}-{color})", end=' ')
-          print("\n")
+          print("### 📊 Severity Breakdown")
+          for sev, color in [('BLOCKER','red'),('CRITICAL','orange'),('MAJOR','yellow'),('MINOR','blue'),('INFO','gray')]:
+              count = counts.get(sev, 0)
+              if count > 0:
+                  print(f"- ![{sev}](https://img.shields.io/badge/{sev}-{count}-{color})")
 
-          for sev in ['BLOCKER','CRITICAL','MAJOR','MINOR','INFO']:
-              if counts.get(sev, 0) == 0: continue
-              print(f"<details><summary>🔍 {sev} ({counts[sev]})</summary>\n")
-              print("| Rule | Location | Message |")
-              print("|---|---|---|")
+          print("\n---\n")
+
+          # Detailed Issues by Severity
+          for sev in ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']:
+              if counts.get(sev, 0) == 0:
+                  continue
+              print(f"<details><summary>🔍 **{sev} Issues** ({counts[sev]})</summary>\n")
+              print("| Rule | File:Line | Message |")
+              print("|------|-----------|---------|")
               for i in issues:
                   if i['severity'] == sev:
                       comp = i['component'].split(":")[-1]
                       line = i.get('line', '?')
-                      msg = i['message'].replace('\n', ' ')[:120]
+                      msg = i['message'].replace('\n', ' ')[:140]
                       print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
-              print("\n</details>\n")
+              print("</details>\n")
 
-          # Security Hotspots detail
+          # Security Hotspots
           hotspots = json.load(open('hotspots.json')).get('hotspots', [])
           if hotspots:
-              print(f"<details><summary>🚨 Security Hotspots ({len(hotspots)})</summary>\n")
-              print("| Status | Rule | Location | Message |")
-              print("|---|---|---|---|")
+              print(f"<details><summary>🚨 **Security Hotspots** ({len(hotspots)})</summary>\n")
+              print("| Status | Rule | File:Line | Message |")
+              print("|--------|------|-----------|---------|")
               for h in hotspots:
                   rule = h.get("ruleKey", "unknown")
                   comp = h["component"].split(":")[-1]
@@ -148,15 +157,16 @@ jobs:
                   status = h.get("status", "TO_REVIEW")
                   msg = h.get("message", "No message").replace("\n", " ")[:120]
                   print(f"| `{status}` | `{rule}` | `{comp}:{line}` | {msg} |")
-              print("\n</details>\n")
+              print("</details>\n")
 
           if not issues and not hotspots:
-              print("🎉 **No new issues or hotspots found on this PR!**\n")
+              print("\n🎉 **No new issues or hotspots found on this PR! Great job!** 🎉\n")
 
           host = os.environ['SONAR_HOST_URL']
           proj = os.environ['SONAR_PROJECT_KEY']
-          print(f"[View full analysis]({host}/dashboard?id={proj}&pullRequest={pr})")
+          print(f"\n🔗 [**View full analysis on SonarQube**]({host}/dashboard?id={proj}&pullRequest={pr})")
           EOF
+
 
       - name: Comment on PR
         if: ${{ github.event_name == 'pull_request' }}
