@@ -22,7 +22,6 @@ permissions:
 
 jobs:
   sonarqube-scan:
-    needs: semgrep-scan 
     uses: ./.github/workflows/sonarqube.yaml
     with:
       projectKey: ${{ inputs.sonarProjectKey }}
