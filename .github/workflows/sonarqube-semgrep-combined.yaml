@@ -7,7 +7,7 @@ on:
         required: true
         type: string
     secrets:
-      SONAR_TOKEN_NEW:
+      SONAR_TOKEN:
         required: true
       SONAR_HOST_URL:
         required: true
@@ -26,7 +26,7 @@ jobs:
     with:
       projectKey: ${{ inputs.sonarProjectKey }}
     secrets:
-      SONAR_TOKEN_NEW: ${{ secrets.SONAR_TOKEN_NEW }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_NEW }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
   semgrep-scan:

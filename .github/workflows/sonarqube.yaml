@@ -38,7 +38,7 @@ jobs:
       - name: Run SonarQube PR Analysis
         id: scan
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_NEW }}
         run: |
           PR=${{ github.event.pull_request.number }}
           SRC=${{ github.event.pull_request.head.ref }}
