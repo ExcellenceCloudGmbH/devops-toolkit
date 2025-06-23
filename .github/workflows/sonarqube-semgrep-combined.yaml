@@ -27,7 +27,7 @@ jobs:
     with:
       projectKey: ${{ inputs.sonarProjectKey }}
     secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_NEW }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
   semgrep-scan:
