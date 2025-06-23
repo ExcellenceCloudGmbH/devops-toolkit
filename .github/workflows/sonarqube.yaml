@@ -94,7 +94,7 @@ jobs:
             "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
             -o hotspots.json
 
-      - name: Generate PR comment (Badge UI + Collapsible per severity)
+      - name: Generate PR comment 
         shell: bash
         run: |
           python3 - << 'EOF' > comment.md
@@ -118,8 +118,7 @@ jobs:
           print(f"- ✅ **Coverage**: `{coverage}%`")
           print(f"- ♻️ **Duplicated Code**: `{duplication}%`\n")
 
-          print("### 🛡️ Issues by Severity")
-
+          print("### 🛡️ Issues by Severity\n")
           severity_order = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']
           colors = {
               'BLOCKER': 'red',
@@ -129,17 +128,12 @@ jobs:
               'INFO': 'lightgray'
           }
 
-          # Print badge icons
           for sev in severity_order:
               count = counts.get(sev, 0)
-              print(f"![{sev}](https://img.shields.io/badge/{sev}-{count}-{colors[sev]})", end=' ')
-          print("\n")
-
-          # Print collapsible section per severity
-          for sev in severity_order:
-              if counts.get(sev, 0) == 0:
+              if count == 0:
                   continue
-              print(f"<details><summary>🔍 {sev} – {counts[sev]} issue(s)</summary>\n")
+              badge = f"https://img.shields.io/badge/{sev}-{count}-{colors[sev]}"
+              print(f'<details><summary><img src="{badge}" alt="{sev}" height="20"></summary>\n')
               print("| Rule | File:Line | Message |")
               print("|------|-----------|---------|")
               for i in issues:
@@ -150,10 +144,10 @@ jobs:
                       print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
               print("</details>\n")
 
-          # Security Hotspots
+          # Security Hotspots (optional, still shown)
           hotspots = json.load(open('hotspots.json')).get('hotspots', [])
           if hotspots:
-              print(f"<details><summary>🚨 Security Hotspots ({len(hotspots)})</summary>\n")
+              print(f"<details><summary><img src='https://img.shields.io/badge/Security_Hotspots-{len(hotspots)}-orange' height='20'></summary>\n")
               print("| Status | Rule | File:Line | Message |")
               print("|--------|------|-----------|---------|")
               for h in hotspots:
