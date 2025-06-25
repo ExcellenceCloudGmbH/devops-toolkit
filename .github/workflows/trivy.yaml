@@ -70,4 +70,8 @@ jobs:
       - name: Fail if vulnerabilities found
         run: |
           trivy fs . \
-            --scanners vuln,config,secret,license
+            --scanners vuln,config,secret,license \
+            --exit-code 1 \
+            --severity CRITICAL,HIGH \
+            --no-progress
+
