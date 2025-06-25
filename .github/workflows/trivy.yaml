@@ -1,36 +1,24 @@
-name: Trivy Comprehensive Scan 
+name: Trivy Scan
 
-on:
-  workflow_call:
-
-permissions:
-  contents: read
+on: [workflow_call]
 
 jobs:
-  trivy-scan:
+  trivy:
     runs-on: ubuntu-latest
-    name: Run trivy
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Trivy
         run: |
-          sudo apt-get update
-          sudo apt-get install wget -y
+          sudo apt-get install -y wget
           wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
           sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
 
-      - name: Run Trivy 
-        continue-on-error: true  
+      - name: Run Trivy
         run: |
-          trivy fs . \
-            --scanners vuln,config,secret,license > new-trivy-results.txt
-            
-      - name: Upload Trivy report
-        uses: actions/upload-artifact@v4
+          trivy config . --format sarif --output trivy-results.sarif || true
+          
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          name: trivy-results
-          path: new-trivy-results.txt
-
+          sarif_file: trivy-results.sarif

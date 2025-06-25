@@ -1,11 +1,16 @@
 name: checkov + trivy combined 
 
 on:
+  push:
+    branches:
+      - '**'
   workflow_call:
 
 permissions:
   contents: read
   pull-requests: write
+  security-events: write  # for Sarif upload
+
 
 jobs:
   checkov-scan:

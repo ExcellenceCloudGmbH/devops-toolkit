@@ -1,25 +1,21 @@
 name: Checkov Scan
 
-on:
-  workflow_call:
+on: [workflow_call]
 
 jobs:
   checkov:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Checkov
         run: pip install checkov
 
       - name: Run Checkov
-        continue-on-error: true
-        run: checkov -d . > new-checkov-results.txt || true
-
-      - name: Upload Checkov Report
-        uses: actions/upload-artifact@v4
+        run: |
+          checkov -d . --output sarif > checkov-results.sarif || true
+          
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          name: checkov-results
-          path: new-checkov-results.txt
+          sarif_file: checkov-results.sarif
