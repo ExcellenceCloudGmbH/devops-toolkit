@@ -34,30 +34,28 @@ jobs:
             --format json \
             --output trivy-results.json
 
-      - name: Show Trivy summary
+      - name: Trivy Security Scan Summary
         run: |
-          echo "### ✅ Trivy Security Scan Summary" >> \$GITHUB_STEP_SUMMARY
+          echo "### ✅ Trivy Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
           jq -r '
-            .Results[]
-            | select(.Vulnerabilities)
+            .Results[]?
+            | select(.Vulnerabilities != null)
             | .Vulnerabilities[]
             | {
-                File: input.Target,
-                Severity,
+                File: .Target,
+                Severity: .Severity,
                 Package: .PkgName,
-                Version: .InstalledVersion,
+                Installed: .InstalledVersion,
                 Fixed: .FixedVersion,
-                Title
+                Title: .Title
               }
-            | @base64
-          ' trivy-results.json | while read -r vuln; do
-            echo "${vuln}" | base64 --decode
-          done | jq -r '
-            (["File", "Severity", "Package", "Installed", "Fixed", "Title"], ["----", "--------", "-------", "----------", "------", "-----"]) ,
-            map([.File, .Severity, .Package, .Version, .Fixed, .Title])
+            | [.File, .Severity, .Package, .Installed, .Fixed, .Title]
             | @tsv
-          ' | column -t -s $'\t' >> \$GITHUB_STEP_SUMMARY
+          ' trivy-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
 
 
 
