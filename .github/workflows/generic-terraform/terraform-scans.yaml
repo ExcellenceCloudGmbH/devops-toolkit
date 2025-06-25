@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   checkov-scan:
-    uses: ./.github/workflows/checkov.yaml
+    uses: ./.github/workflows/generic-terraform/checkov.yaml
 
   trivy-scan:
-    uses: ./.github/workflows/trivy.yaml
+    uses: ./.github/workflows/generic-terraform/trivy.yaml
