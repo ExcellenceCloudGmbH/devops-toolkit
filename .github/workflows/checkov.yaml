@@ -26,12 +26,43 @@ jobs:
 
       - name: Show Checkov summary
         run: |
-          echo "### Checkov Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Checkov Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+
           jq -r '
             [
-              .results.failed_checks[]?.severity
-            ] | group_by(.) | map({(.[0]): length}) | add
-          ' checkov-results.json >> $GITHUB_STEP_SUMMARY || echo "No failed checks found" >> $GITHUB_STEP_SUMMARY
+              .results.failed_checks[]? | {
+                check_id,
+                check_name,
+                file_path,
+                resource,
+                severity,
+                guideline
+              }
+            ] 
+            | group_by(.severity)
+            | map({
+                severity: .[0].severity,
+                count: length
+              }) 
+            | (["Severity", "Count"], ["---", "---"]) + 
+              map([.severity, (.count | tostring)])
+            | @tsv' results_json.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          jq -r '
+            [
+              .results.failed_checks[]? | {
+                check_id,
+                check_name,
+                file_path,
+                resource,
+                severity
+              }
+            ]
+            | (["ID", "Severity", "File", "Resource"], ["--", "--", "--", "--"]) + 
+              map([.check_id, .severity, .file_path, .resource])
+            | @tsv' results_json.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
 
 
 
