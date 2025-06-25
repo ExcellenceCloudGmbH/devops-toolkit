@@ -28,31 +28,25 @@ jobs:
         run: |
           echo "### ✅ Checkov Security Scan Summary" >> $GITHUB_STEP_SUMMARY
 
-          if jq -e '.results.failed_checks | length > 0' checkov-results.json > /dev/null; then
-            jq -r '
-              [.results.failed_checks[]? | .severity]
-              | group_by(.)
-              | map({(.[0]): length})
-              | add
-              | to_entries
-              | ["| Severity | Count |", "|----------|-------|"] + 
-                map("| \(.key) | \(.value) |")
-              | .[]
-            ' checkov-results.json >> $GITHUB_STEP_SUMMARY
+          jq -r '
+            group_by(.severity) 
+            | map({
+                severity: .[0].severity,
+                count: length
+              }) 
+            | (["Severity", "Count"], ["---", "---"]) + 
+              map([.severity, (.count | tostring)]) 
+            | @tsv
+          ' checkov-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
 
-            echo "" >> $GITHUB_STEP_SUMMARY
+          echo -e "\n### 🛠️ Failed Checks Detail\n" >> $GITHUB_STEP_SUMMARY
 
-            echo "#### 🔍 Failed Checks Summary" >> $GITHUB_STEP_SUMMARY
-            jq -r '
-              [.results.failed_checks[]? | {id: .check_id, file: .file_path}]
-              | unique
-              | ["| Check ID | File |", "|----------|------|"] +
-                map("| \(.id) | \(.file) |")
-              | .[]
-            ' checkov-results.json >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✅ No failed checks found." >> $GITHUB_STEP_SUMMARY
-          fi
+          jq -r '
+            (["ID", "Severity", "File", "Resource"], ["--", "--", "--", "--"]) + 
+            map([.check_id, .severity, .file_path, .resource]) 
+            | @tsv
+          ' checkov-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+
 
 
 
