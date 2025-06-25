@@ -65,3 +65,9 @@ jobs:
         with:
           name: trivy-results-json
           path: trivy-results.json
+
+
+      - name: Fail if vulnerabilities found
+        run: |
+          trivy fs . \
+            --scanners vuln,config,secret,license
