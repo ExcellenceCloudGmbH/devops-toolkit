@@ -24,6 +24,16 @@ jobs:
             -o json \
             --output-file checkov-results.json || true
 
+      - name: Show Checkov summary
+        run: |
+          echo "### Checkov Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          jq -r '
+            [
+              .results.failed_checks[]?.severity
+            ] | group_by(.) | map({(.[0]): length}) | add
+          ' checkov-results.json >> $GITHUB_STEP_SUMMARY || echo "No failed checks found" >> $GITHUB_STEP_SUMMARY
+
+
 
       - name: Upload Checkov JSON as artifact
         uses: actions/upload-artifact@v4

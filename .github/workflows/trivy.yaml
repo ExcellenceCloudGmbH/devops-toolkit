@@ -34,6 +34,16 @@ jobs:
             --format json \
             --output trivy-results.json
 
+      - name: Show Trivy summary
+        run: |
+          echo "### Trivy Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+          jq -r '
+            [
+              (.Results[]?.Vulnerabilities[]? | .Severity) 
+            ] | group_by(.) | map({(.[0]): length}) | add
+          ' trivy-results.json >> $GITHUB_STEP_SUMMARY || echo "No vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+
+
       - name: Upload Trivy JSON Report
         uses: actions/upload-artifact@v4
         with:
