@@ -36,12 +36,27 @@ jobs:
 
       - name: Show Trivy summary
         run: |
-          echo "### Trivy Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Trivy Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+
+          
           jq -r '
             [
-              (.Results[]?.Vulnerabilities[]? | .Severity) 
+              .Results[]?.Vulnerabilities[]? | .Severity
             ] | group_by(.) | map({(.[0]): length}) | add
-          ' trivy-results.json >> $GITHUB_STEP_SUMMARY || echo "No vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+            | to_entries 
+            | (["Severity", "Count"], ["---", "---"]) + map([.key, (.value | tostring)])
+            | @tsv' trivy-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add detailed info table
+          jq -r '
+            .Results[]?.Vulnerabilities[]? 
+            | {ID, Severity, PkgName, Title}
+            | (["ID", "Severity", "Package", "Title"], ["--", "--", "--", "--"]) 
+              + [[.ID, .Severity, .PkgName, .Title]]
+            | @tsv' trivy-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+
 
 
       - name: Upload Trivy JSON Report
