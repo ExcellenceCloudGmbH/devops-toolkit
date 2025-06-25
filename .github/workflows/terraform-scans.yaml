@@ -10,10 +10,6 @@ permissions:
 jobs:
   checkov-scan:
     uses: ./.github/workflows/checkov.yaml
-    with:
-      checkout: caller
 
   trivy-scan:
     uses: ./.github/workflows/trivy.yaml
-    with:
-      checkout: caller
