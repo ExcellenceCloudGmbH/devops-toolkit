@@ -46,7 +46,7 @@ jobs:
               }) 
             | (["Severity", "Count"], ["---", "---"]) + 
               map([.severity, (.count | tostring)])
-            | @tsv' results_json.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+            | @tsv' checkov-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
 
@@ -62,7 +62,7 @@ jobs:
             ]
             | (["ID", "Severity", "File", "Resource"], ["--", "--", "--", "--"]) + 
               map([.check_id, .severity, .file_path, .resource])
-            | @tsv' results_json.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+            | @tsv' checkov-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
 
 
 
