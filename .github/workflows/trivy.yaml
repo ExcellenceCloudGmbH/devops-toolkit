@@ -1,0 +1,36 @@
+name: Trivy Comprehensive Scan 
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    name: Run trivy
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install wget -y
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
+          sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
+
+      - name: Run Trivy 
+        continue-on-error: true  
+        run: |
+          trivy fs . \
+            --scanners vuln,config,secret,license > new-trivy-results.txt
+            
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: new-trivy-results.txt
+

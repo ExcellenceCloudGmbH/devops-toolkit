@@ -1,0 +1,25 @@
+name: Checkov Scan
+
+on:
+  workflow_call:
+
+jobs:
+  checkov:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov
+        continue-on-error: true
+        run: checkov -d . > new-checkov-results.txt || true
+
+      - name: Upload Checkov Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-results
+          path: new-checkov-results.txt

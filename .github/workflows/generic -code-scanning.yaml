@@ -1,4 +1,4 @@
-name: SonarQube + Semgrep Combined Scan 🔎
+name: SonarQube + Semgrep Combined Scan 
 
 on:
   workflow_call:
