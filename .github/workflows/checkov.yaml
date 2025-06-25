@@ -5,17 +5,22 @@ on: [workflow_call]
 jobs:
   checkov:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install Checkov
         run: pip install checkov
 
-      - name: Run Checkov
+      - name: Run Checkov and generate SARIF
+        continue-on-error: true
         run: |
-          checkov -d . --output sarif > checkov-results.sarif || true
-          
-      - name: Upload SARIF
+          checkov -d . \
+            --output-format sarif \
+            --output-file-path checkov-results.sarif || true
+
+      - name: Upload SARIF 
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: checkov-results.sarif

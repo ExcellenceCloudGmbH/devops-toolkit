@@ -1,24 +1,43 @@
-name: Trivy Scan
+name: Trivy Comprehensive Scan
 
-on: [workflow_call]
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  security-events: write  # Needed for SARIF 
 
 jobs:
-  trivy:
+  trivy-scan:
     runs-on: ubuntu-latest
+    name: Trivy Security Scan
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install Trivy
         run: |
-          sudo apt-get install -y wget
+          sudo apt-get update
+          sudo apt-get install wget -y
           wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
           sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
 
-      - name: Run Trivy
+      - name: Run Trivy and generate SARIF
+        continue-on-error: true
         run: |
-          trivy config . --format sarif --output trivy-results.sarif || true
-          
-      - name: Upload SARIF
+          trivy fs . \
+            --scanners vuln,config,secret,license \
+            --format sarif \
+            --output trivy-results.sarif
+
+      - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Upload Trivy SARIF as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results-sarif
+          path: trivy-results.sarif
