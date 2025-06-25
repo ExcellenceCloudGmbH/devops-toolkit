@@ -36,26 +36,29 @@ jobs:
 
       - name: Show Trivy summary
         run: |
-          echo "### ✅ Trivy Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Trivy Security Scan Summary" >> \$GITHUB_STEP_SUMMARY
 
-          
           jq -r '
-            [
-              .Results[]?.Vulnerabilities[]? | .Severity
-            ] | group_by(.) | map({(.[0]): length}) | add
-            | to_entries 
-            | (["Severity", "Count"], ["---", "---"]) + map([.key, (.value | tostring)])
-            | @tsv' trivy-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+            .Results[]
+            | select(.Vulnerabilities)
+            | .Vulnerabilities[]
+            | {
+                File: input.Target,
+                Severity,
+                Package: .PkgName,
+                Version: .InstalledVersion,
+                Fixed: .FixedVersion,
+                Title
+              }
+            | @base64
+          ' trivy-results.json | while read -r vuln; do
+            echo "${vuln}" | base64 --decode
+          done | jq -r '
+            (["File", "Severity", "Package", "Installed", "Fixed", "Title"], ["----", "--------", "-------", "----------", "------", "-----"]) ,
+            map([.File, .Severity, .Package, .Version, .Fixed, .Title])
+            | @tsv
+          ' | column -t -s $'\t' >> \$GITHUB_STEP_SUMMARY
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Add detailed info table
-          jq -r '
-            .Results[]?.Vulnerabilities[]? 
-            | {ID, Severity, PkgName, Title}
-            | (["ID", "Severity", "Package", "Title"], ["--", "--", "--", "--"]) 
-              + [[.ID, .Severity, .PkgName, .Title]]
-            | @tsv' trivy-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
 
 
 
