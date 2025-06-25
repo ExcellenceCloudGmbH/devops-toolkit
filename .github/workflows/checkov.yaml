@@ -11,7 +11,7 @@ jobs:
       - name: Checkout caller repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
+          repository: ${{ github.repository }}   # Get the caller repo not current repo by default
           ref: ${{ github.ref }}
 
       - name: Install Checkov
@@ -21,8 +21,8 @@ jobs:
         continue-on-error: true
         run: |
           checkov -d . \
-            --output-format json \
-            --output-file-path checkov-results.json || true
+            -o json \
+            --output-file checkov-results.json || true
 
 
       - name: Upload Checkov JSON as artifact
