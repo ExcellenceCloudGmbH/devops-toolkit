@@ -1,14 +1,13 @@
-name: Checkov Scan
-
-on: [workflow_call]
-
 jobs:
   checkov:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout caller repository
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }} # pulls the branch of the repo that triggered the reusable workflow
+          ref: ${{ github.ref }}
 
       - name: Install Checkov
         run: pip install checkov
