@@ -26,26 +26,45 @@ jobs:
 
       - name: Show Checkov summary
         run: |
-          echo "### ✅ Checkov Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+
+          echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+
 
           jq -r '
-            group_by(.severity) 
-            | map({
-                severity: .[0].severity,
-                count: length
-              }) 
-            | (["Severity", "Count"], ["---", "---"]) + 
-              map([.severity, (.count | tostring)]) 
-            | @tsv
-          ' checkov-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+            # Flatten to a list of failed checks
+            .[]?                                    # each check-type block
+            | .results.failed_checks[]?             # each failed check
+            | .severity // "UNKNOWN"                # default when severity is null
+          ' checkov-results.json \
+          | sort \
+          | uniq -c \
+          | awk '
+              BEGIN  { printf "| Severity | Count |\n|----------|-------|\n" }
+              { printf "| %s | %d |\n", $2, $1 }
+            ' >> "$GITHUB_STEP_SUMMARY"
 
-          echo -e "\n### 🛠️ Failed Checks Detail\n" >> $GITHUB_STEP_SUMMARY
+
+          echo -e "\n### 🛠️ Failed Checks Detail\n" >> "$GITHUB_STEP_SUMMARY"
+          echo '|  Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '
-            (["ID", "Severity", "File", "Resource"], ["--", "--", "--", "--"]) + 
-            map([.check_id, .severity, .file_path, .resource]) 
+            .[]?                                # each check-type block
+            | .check_type as $ctype             # save the type
+            | .results.failed_checks[]?         # each failed check
+            | {
+                type:   $ctype,
+                name:   (.check_name | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
+                file:   .file_path,
+                lines:  (.file_line_range // [] | map(tostring) | join("-"))
+              }
+            | [.type, .name, .file, .lines]     # emit as TSV
             | @tsv
-          ' checkov-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+          ' checkov-results.json |
+          while IFS=$'\t' read -r type name file lines; do
+            echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
 
 
 
