@@ -34,28 +34,39 @@ jobs:
             --format json \
             --output trivy-results.json
 
-      - name: Trivy Security Scan Summary
+      - name: Trivy Security Scan Summary (UI Enhanced)
         run: |
-          echo "### ✅ Trivy Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Trivy Security Scan Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo '| 🔐 Severity | 📦 Package | 📌 Installed | 🛠️ Fixed | 🧠 Title |' >> $GITHUB_STEP_SUMMARY
+          echo '|------------|-----------|--------------|---------|--------|' >> $GITHUB_STEP_SUMMARY
 
           jq -r '
-            .Results[]?
+            .Results[]? 
             | select(.Vulnerabilities != null)
             | .Vulnerabilities[]
             | {
-                File: .Target,
-                Severity: .Severity,
-                Package: .PkgName,
-                Installed: .InstalledVersion,
-                Fixed: .FixedVersion,
-                Title: .Title
+                severity: .Severity,
+                package: .PkgName,
+                installed: .InstalledVersion,
+                fixed: .FixedVersion,
+                title: (.Title | gsub("[\\r\\n]+"; " ") | gsub("\\|"; " "))
               }
-            | [.File, .Severity, .Package, .Installed, .Fixed, .Title]
-            | @tsv
-          ' trivy-results.json | column -t -s $'\t' >> $GITHUB_STEP_SUMMARY
+            | [
+                (if .severity == "CRITICAL" then "🛑 CRITICAL"
+                elif .severity == "HIGH" then "🔴 HIGH"
+                elif .severity == "MEDIUM" then "🟡 MEDIUM"
+                elif .severity == "LOW" then "🟢 LOW"
+                else "⚪ UNKNOWN" end),
+                .package,
+                .installed,
+                (.fixed // "❌"),
+                .title
+              ] 
+            | @tsv' trivy-results.json | while IFS=$'\t' read -r severity package installed fixed title; do
+              echo "| $severity | $package | $installed | $fixed | $title |" >> $GITHUB_STEP_SUMMARY
+            done
 
-          echo "" >> $GITHUB_STEP_SUMMARY
 
 
 
