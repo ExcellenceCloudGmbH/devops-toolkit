@@ -22,12 +22,12 @@ jobs:
         run: |
           checkov -d . \
             -o json \
-            --output-file checkov-results.json || true
+            --output-file results_json.json  || true
 
       - name: Checkov Security Scan Summary
         run: |
           # 0) Point to the file Checkov produced – adjust if you use a different name
-          FILE=checkov-results.json     
+          FILE=results_json.json      
 
           # 1) Table header
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
@@ -72,8 +72,8 @@ jobs:
       - name: Upload Checkov JSON as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-results-json
-          path: checkov-results.json
+          name: results_json.json 
+          path: results_json.json 
 
 
 
