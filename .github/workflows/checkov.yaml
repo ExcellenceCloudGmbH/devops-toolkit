@@ -24,43 +24,27 @@ jobs:
             -o json \
             --output-file checkov-results.json || true
 
-      - name: Show Checkov summary
+      - name: ✅ Checkov Security Scan Summary
         run: |
+          FILE=results_json.json   # <-- adjust if the filename differs
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-
-
-          jq -r '
-            # Flatten to a list of failed checks
-            .[]?                                    # each check-type block
-            | .results.failed_checks[]?             # each failed check
-            | .severity // "UNKNOWN"                # default when severity is null
-          ' checkov-results.json \
-          | sort \
-          | uniq -c \
-          | awk '
-              BEGIN  { printf "| Severity | Count |\n|----------|-------|\n" }
-              { printf "| %s | %d |\n", $2, $1 }
-            ' >> "$GITHUB_STEP_SUMMARY"
-
-
-          echo -e "\n### 🛠️ Failed Checks Detail\n" >> "$GITHUB_STEP_SUMMARY"
-          echo '|  Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '| 🔎 Type | 🧠 Check name | 📄 File | #️⃣ Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '
-            .[]?                                # each check-type block
-            | .check_type as $ctype             # save the type
-            | .results.failed_checks[]?         # each failed check
-            | {
-                type:   $ctype,
-                name:   (.check_name | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-                file:   .file_path,
-                lines:  (.file_line_range // [] | map(tostring) | join("-"))
-              }
-            | [.type, .name, .file, .lines]     # emit as TSV
+            .[]                               # each top-level object (one per check_type)
+            | .check_type as $ctype
+            | .results.failed_checks[]?       # only failed checks
+            | [
+                $ctype,
+                (.check_name     | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
+                .file_path,
+                (.file_line_range // [] | map(tostring) | join("-"))
+              ]
             | @tsv
-          ' checkov-results.json |
+          ' "$FILE" |
           while IFS=$'\t' read -r type name file lines; do
             echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
           done
