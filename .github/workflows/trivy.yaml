@@ -34,90 +34,90 @@ jobs:
             --format json \
             --output trivy-results.json
 
-- name: Trivy Security Scan Summary
-  run: |
-    ############################################################
-    # Heading
-    ############################################################
-    echo "### 🔍 Trivy Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-    echo "" >> "$GITHUB_STEP_SUMMARY"
+      - name: Trivy Security Scan Summary
+        run: |
+          ############################################################
+          # Heading
+          ############################################################
+          echo "### 🔍 Trivy Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
-    ############################################################
-    # 1. Vulnerabilities
-    ############################################################
-    echo "#### ⚠️ Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
-    echo '| 📄 Target | 🔎 Type | 🆔 CVE | 🔐 Severity | 📦 Package | 📌 Installed | 🛠️ Fixed | 🧠 Title |' >> "$GITHUB_STEP_SUMMARY"
-    echo '|-----------|---------|--------|-------------|-----------|--------------|----------|----------|' >> "$GITHUB_STEP_SUMMARY"
+          ############################################################
+          # 1. Vulnerabilities
+          ############################################################
+          echo "#### ⚠️ Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
+          echo '| 📄 Target | 🔎 Type | 🆔 CVE | 🔐 Severity | 📦 Package | 📌 Installed | 🛠️ Fixed | 🧠 Title |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|-----------|---------|--------|-------------|-----------|--------------|----------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
-    jq -r '
-      .Results[]?
-      | select(.Vulnerabilities)
-      | . as $r
-      | .Vulnerabilities[]
-      | {
-          target:    $r.Target,
-          type:      $r.Type,
-          cve:       .VulnerabilityID,
-          severity:  .Severity,
-          pkg:       .PkgName,
-          installed: .InstalledVersion,
-          fixed:     (.FixedVersion // "—"),
-          title:     (.Title | gsub("[\\r\\n]+";" ") | gsub("\\|";" "))
-        }
-      | [
-          .target,
-          .type,
-          .cve,
-          (if .severity=="CRITICAL" then "🛑 CRITICAL"
-           elif .severity=="HIGH"   then "🔴 HIGH"
-           elif .severity=="MEDIUM" then "🟡 MEDIUM"
-           elif .severity=="LOW"    then "🟢 LOW"
-           else "⚪ UNKNOWN" end),
-          .pkg,
-          .installed,
-          .fixed,
-          .title
-        ] | @tsv' trivy-results.json | while IFS=$'\t' read -r tgt typ cve sev pkg inst fix title; do
-        echo "| $tgt | $typ | $cve | $sev | $pkg | $inst | $fix | $title |" >> "$GITHUB_STEP_SUMMARY"
-      done
+          jq -r '
+            .Results[]?
+            | select(.Vulnerabilities)
+            | . as $r
+            | .Vulnerabilities[]
+            | {
+                target:    $r.Target,
+                type:      $r.Type,
+                cve:       .VulnerabilityID,
+                severity:  .Severity,
+                pkg:       .PkgName,
+                installed: .InstalledVersion,
+                fixed:     (.FixedVersion // "—"),
+                title:     (.Title | gsub("[\\r\\n]+";" ") | gsub("\\|";" "))
+              }
+            | [
+                .target,
+                .type,
+                .cve,
+                (if .severity=="CRITICAL" then "🛑 CRITICAL"
+                elif .severity=="HIGH"   then "🔴 HIGH"
+                elif .severity=="MEDIUM" then "🟡 MEDIUM"
+                elif .severity=="LOW"    then "🟢 LOW"
+                else "⚪ UNKNOWN" end),
+                .pkg,
+                .installed,
+                .fixed,
+                .title
+              ] | @tsv' trivy-results.json | while IFS=$'\t' read -r tgt typ cve sev pkg inst fix title; do
+              echo "| $tgt | $typ | $cve | $sev | $pkg | $inst | $fix | $title |" >> "$GITHUB_STEP_SUMMARY"
+            done
 
-    ############################################################
-    # 2. Misconfigurations
-    ############################################################
-    echo "" >> "$GITHUB_STEP_SUMMARY"
-    echo "#### 🔧 Misconfigurations" >> "$GITHUB_STEP_SUMMARY"
-    echo '| 📄 Target | 🔎 Type | 🆔 Check | 🔐 Severity | 🧠 Title | 💬 Message | 🛠️ Resolution |' >> "$GITHUB_STEP_SUMMARY"
-    echo '|-----------|---------|----------|-------------|----------|-----------|----------------|' >> "$GITHUB_STEP_SUMMARY"
+          ############################################################
+          # 2. Misconfigurations
+          ############################################################
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "#### 🔧 Misconfigurations" >> "$GITHUB_STEP_SUMMARY"
+          echo '| 📄 Target | 🔎 Type | 🆔 Check | 🔐 Severity | 🧠 Title | 💬 Message | 🛠️ Resolution |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|-----------|---------|----------|-------------|----------|-----------|----------------|' >> "$GITHUB_STEP_SUMMARY"
 
-    jq -r '
-      .Results[]?
-      | select(.Misconfigurations)
-      | . as $r
-      | .Misconfigurations[]
-      | {
-          target:     $r.Target,
-          type:       $r.Type,
-          id:         .ID,
-          severity:   .Severity,
-          title:      (.Title     | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-          message:    (.Message   | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-          resolution: (.Resolution| gsub("[\\r\\n]+";" ") | gsub("\\|";" "))
-        }
-      | [
-          .target,
-          .type,
-          .id,
-          (if .severity=="CRITICAL" then "🛑 CRITICAL"
-           elif .severity=="HIGH"   then "🔴 HIGH"
-           elif .severity=="MEDIUM" then "🟡 MEDIUM"
-           elif .severity=="LOW"    then "🟢 LOW"
-           else "⚪ UNKNOWN" end),
-          .title,
-          .message,
-          .resolution
-        ] | @tsv' trivy-results.json | while IFS=$'\t' read -r tgt typ id sev title msg res; do
-        echo "| $tgt | $typ | $id | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
-      done
+          jq -r '
+            .Results[]?
+            | select(.Misconfigurations)
+            | . as $r
+            | .Misconfigurations[]
+            | {
+                target:     $r.Target,
+                type:       $r.Type,
+                id:         .ID,
+                severity:   .Severity,
+                title:      (.Title     | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
+                message:    (.Message   | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
+                resolution: (.Resolution| gsub("[\\r\\n]+";" ") | gsub("\\|";" "))
+              }
+            | [
+                .target,
+                .type,
+                .id,
+                (if .severity=="CRITICAL" then "🛑 CRITICAL"
+                elif .severity=="HIGH"   then "🔴 HIGH"
+                elif .severity=="MEDIUM" then "🟡 MEDIUM"
+                elif .severity=="LOW"    then "🟢 LOW"
+                else "⚪ UNKNOWN" end),
+                .title,
+                .message,
+                .resolution
+              ] | @tsv' trivy-results.json | while IFS=$'\t' read -r tgt typ id sev title msg res; do
+              echo "| $tgt | $typ | $id | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
+            done
 
 
 
