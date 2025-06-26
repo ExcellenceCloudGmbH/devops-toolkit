@@ -40,9 +40,9 @@ jobs:
           echo "### 🔍 Trivy Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
- 
-          echo "#### Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
-          echo '|  Target | Type | Severity |  Package |  Installed |  Fixed | Title |' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "#### ⚠️ Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
+          echo '|  Target |  Type |  Severity |  Package | Installed |  Fixed | Title |' >> "$GITHUB_STEP_SUMMARY"
           echo '|-----------|---------|-------------|-----------|--------------|----------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '
@@ -76,13 +76,11 @@ jobs:
               echo "| $tgt | $typ | $sev | $pkg | $inst | $fix | $title |" >> "$GITHUB_STEP_SUMMARY"
             done
 
-          ############################################################
-          # 2. Misconfigurations  (show StartLine instead of Check ID)
-          ############################################################
+
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "#### 🔧 Misconfigurations" >> "$GITHUB_STEP_SUMMARY"
-          echo '|  Target | Type |  Line |  Severity |  Title | Message | Resolution |' >> "$GITHUB_STEP_SUMMARY"
-          echo '|-----------|---------|--------|-------------|----------|-----------|----------------|' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Target |  Type |  Severity |  Title |  Message |  Resolution |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|-----------|---------|-------------|----------|-----------|----------------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '
             .Results[]?
@@ -92,7 +90,6 @@ jobs:
             | {
                 target:     $r.Target,
                 type:       $r.Type,
-                line:       .StartLine,
                 severity:   .Severity,
                 title:      (.Title     | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
                 message:    (.Message   | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
@@ -101,7 +98,6 @@ jobs:
             | [
                 .target,
                 .type,
-                .line,
                 (if .severity=="CRITICAL" then "🛑 CRITICAL"
                 elif .severity=="HIGH"   then "🔴 HIGH"
                 elif .severity=="MEDIUM" then "🟡 MEDIUM"
@@ -111,9 +107,10 @@ jobs:
                 .message,
                 .resolution
               ] | @tsv' trivy-results.json |
-            while IFS=$'\t' read -r tgt typ line sev title msg res; do
-              echo "| $tgt | $typ | $line | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
+            while IFS=$'\t' read -r tgt typ sev title msg res; do
+              echo "| $tgt | $typ | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
             done
+
 
 
 
