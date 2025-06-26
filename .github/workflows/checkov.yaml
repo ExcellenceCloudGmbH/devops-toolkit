@@ -26,31 +26,35 @@ jobs:
 
       - name: Checkov Security Scan Summary
         run: |
-          # 0) Make sure the filename is correct
-          FILE=checkov-results.json        # ← adjust if your job writes a different name
+          # 0) Point to the file Checkov produced – adjust if you use a different name
+          FILE=checkov-results.json     
 
           # 1) Table header
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo ""                                   >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '| 🔎 Type | 🧠 Check name | 📄 File | #️⃣ Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           # 2) Emit one TSV row per failed check
+          #    -s  = “slurp”: wrap anything (object, stream, array) into an array first
+          #    -c  = compact output, one JSON line → one TSV line
           jq -r -c -s '
-            # normalise: always iterate over an array of objects
-            (if type=="array" then . else [.] end)[]                # each check-type object
+            (if type=="array" then . else [.] end)[]         # array-safe iteration
 
-            | .check_type as $ctype                                 # remember the scanner type
+            | .check_type as $ctype                          # remember the scanner type
 
             | (
-                .failed_checks                 //                    # new Checkov format
-                (.results.failed_checks // [])                       # legacy “results” wrapper
-              )[]?                                                   # “? ” keeps going if empty
+                .results.failed_checks //                   # current layout
+                .failed_checks        // []                 # fallback for older layout
+              )[]
 
             | [
                 $ctype,
-                (.check_name     // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-                (.file_path      // .file_abs_path // .repo_file_path // "—"),
+                (.check_name     // "—"
+                  | gsub("[\\r\\n]+";" ")                    # strip newlines
+                  | gsub("\\|";" ")                         # strip pipes
+                ),
+                (.file_path      // .repo_file_path // .file_abs_path // "—"),
                 ((.file_line_range // []) | map(tostring) | join("-"))
               ]
             | @tsv
@@ -58,6 +62,7 @@ jobs:
           while IFS=$'\t' read -r type name file lines; do
             echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
           done
+
 
 
 
