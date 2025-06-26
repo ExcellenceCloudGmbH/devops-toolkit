@@ -27,7 +27,7 @@ jobs:
       - name: ✅ Checkov Security Scan Summary
         run: |
           set -eo pipefail
-          FILE=results_json.json          
+          FILE=results_json.json          # ← must match the file you write above
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -35,26 +35,21 @@ jobs:
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r -c -s '
-            (if type=="array" then . else [.] end)[]                # works for array or single obj
-            | .check_type as $ctype
-            | (
-                .results.failed_checks //   # normal position
-                .failed_checks        // [] # very old builds
-              )[]
-            | [
-                $ctype,
-                (.check_name     // "—" |
-                  gsub("[\\r\\n]+";" ") |
-                  gsub("\\|";" ")
-                ),
-                (.file_path      // .repo_file_path // .file_abs_path // "—"),
-                ((.file_line_range // []) | map(tostring) | join("-"))
-              ]
-            | @tsv
+            (if type=="array" then . else [.] end)[]                         |
+            .check_type as $ctype                                            |
+            (.results.failed_checks // .failed_checks // [])[]               |
+            [
+              $ctype,
+              (.check_name     // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
+              (.file_path      // .repo_file_path // .file_abs_path // "—"),
+              ((.file_line_range // []) | map(tostring) | join("-"))
+            ]                                                                |
+            @tsv
           ' "$FILE" |
           while IFS=$'\t' read -r type name file lines; do
             echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
           done
+
 
 
 
