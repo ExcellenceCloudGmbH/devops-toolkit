@@ -26,7 +26,7 @@ jobs:
       - name:  Checkov Security Scan Summary
         run: |
           set -eo pipefail
-          FILE=results_json.json        # must match the file created above
+          FILE=results_json.json     
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
