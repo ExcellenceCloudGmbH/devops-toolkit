@@ -26,7 +26,7 @@ jobs:
 
       - name: ✅ Checkov Security Scan Summary
         run: |
-          FILE=results_json.json   # <-- adjust if the filename differs
+          FILE=checkov-results.json 
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
