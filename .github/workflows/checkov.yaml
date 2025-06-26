@@ -24,20 +24,19 @@ jobs:
             -o json \
             --output-file checkov-results.json || true
 
-      - name: ✅ Checkov Security Scan Summary
+      - name:  Checkov Security Scan Summary
         run: |
-          FILE=checkov-results.json   
+          FILE=checkov-results.json   # make sure this matches the actual name
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '| Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| 🔎 Type | 🧠 Check name | 📄 File | #️⃣ Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r -c -s '
-            .[]                         
-            | select(type=="object")   
+            .[]                                   # each {check_type, results,…}
             | .check_type as $ctype
-            | (.results.failed_checks // [])[]   # only failed checks
+            | (.results.failed_checks // [])[]    # only failed checks
             | [
                 $ctype,
                 (.check_name     // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
@@ -49,6 +48,7 @@ jobs:
           while IFS=$'\t' read -r type name file lines; do
             echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
           done
+
 
 
 
