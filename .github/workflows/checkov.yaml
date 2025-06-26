@@ -24,35 +24,28 @@ jobs:
             -o json \
             --output-file results_json.json  || true
 
-      - name: Checkov Security Scan Summary
+      - name: ✅ Checkov Security Scan Summary
         run: |
-          # 0) Point to the file Checkov produced – adjust if you use a different name
-          FILE=results_json.json      
+          set -eo pipefail
+          FILE=results_json.json          
 
-          # 1) Table header
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '| 🔎 Type | 🧠 Check name | 📄 File | #️⃣ Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
-          # 2) Emit one TSV row per failed check
-          #    -s  = “slurp”: wrap anything (object, stream, array) into an array first
-          #    -c  = compact output, one JSON line → one TSV line
           jq -r -c -s '
-            (if type=="array" then . else [.] end)[]         # array-safe iteration
-
-            | .check_type as $ctype                          # remember the scanner type
-
+            (if type=="array" then . else [.] end)[]                # works for array or single obj
+            | .check_type as $ctype
             | (
-                .results.failed_checks //                   # current layout
-                .failed_checks        // []                 # fallback for older layout
+                .results.failed_checks //   # normal position
+                .failed_checks        // [] # very old builds
               )[]
-
             | [
                 $ctype,
-                (.check_name     // "—"
-                  | gsub("[\\r\\n]+";" ")                    # strip newlines
-                  | gsub("\\|";" ")                         # strip pipes
+                (.check_name     // "—" |
+                  gsub("[\\r\\n]+";" ") |
+                  gsub("\\|";" ")
                 ),
                 (.file_path      // .repo_file_path // .file_abs_path // "—"),
                 ((.file_line_range // []) | map(tostring) | join("-"))
@@ -69,10 +62,11 @@ jobs:
 
 
 
+
       - name: Upload Checkov JSON as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results_json.json 
+          name: checkov-results-json 
           path: results_json.json 
 
 
