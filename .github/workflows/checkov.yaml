@@ -30,7 +30,7 @@ jobs:
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '| 🔎 Type | 🧠 Check name | 📄 File | #️⃣ Lines |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|  Type | Check name |  File | Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '
