@@ -1,33 +1,32 @@
 name: Checkov JSON Scan
-
-on:
-  workflow_call:
+on: workflow_call
 
 jobs:
   checkov:
     runs-on: ubuntu-latest
-
     steps:
+      
       - name: Checkout caller repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}   # Get the caller repo not current repo by default
-          ref: ${{ github.ref }}
+          repository: ${{ github.repository }}
+          ref:        ${{ github.ref }}
 
+      
       - name: Install Checkov
         run: pip install checkov
 
+      # capture JSON
       - name: Run Checkov and generate JSON
-        continue-on-error: true
+        continue-on-error: true          # don’t fail the job yet
         run: |
-          checkov -d . \
-            -o json \
-            --output-file results_json.json  || true
+          checkov -d . -o json > results_json.json || true   # 👈 redirect
 
-      - name: ✅ Checkov Security Scan Summary
+      
+      - name: Checkov Security Scan Summary
         run: |
           set -eo pipefail
-          FILE=results_json.json          # ← must match the file you write above
+          FILE=results_json.json   # must match the redirect above
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -35,38 +34,28 @@ jobs:
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
           jq -r -c -s '
-            (if type=="array" then . else [.] end)[]                         |
-            .check_type as $ctype                                            |
-            (.results.failed_checks // .failed_checks // [])[]               |
+            (if type=="array" then . else [.] end)[]        |
+            .check_type as $ctype                           |
+            (.results.failed_checks // .failed_checks // [])[] |
             [
               $ctype,
               (.check_name     // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
               (.file_path      // .repo_file_path // .file_abs_path // "—"),
               ((.file_line_range // []) | map(tostring) | join("-"))
-            ]                                                                |
+            ]                                               |
             @tsv
           ' "$FILE" |
           while IFS=$'\t' read -r type name file lines; do
             echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
           done
 
-
-
-
-
-
-
-
-
+   
       - name: Upload Checkov JSON as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-results-json 
-          path: results_json.json 
+          name: checkov-results-json
+          path: results_json.json
 
-
-
+     
       - name: Fail if vulnerabilities found
-        run: |
-          checkov -d . 
-
+        run: checkov -d .
