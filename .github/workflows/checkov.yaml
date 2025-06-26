@@ -26,28 +26,30 @@ jobs:
 
       - name: ✅ Checkov Security Scan Summary
         run: |
-          FILE=checkov-results.json 
+          FILE=checkov-results.json   
 
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '|  Type | Check name |  File | Lines |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
-          jq -r '
-            .[]                               # each top-level object (one per check_type)
+          jq -r -c -s '
+            .[]                         
+            | select(type=="object")   
             | .check_type as $ctype
-            | .results.failed_checks[]?       # only failed checks
+            | (.results.failed_checks // [])[]   # only failed checks
             | [
                 $ctype,
-                (.check_name     | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-                .file_path,
-                (.file_line_range // [] | map(tostring) | join("-"))
+                (.check_name     // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
+                (.file_path      // "—"),
+                ((.file_line_range // []) | map(tostring) | join("-"))
               ]
             | @tsv
           ' "$FILE" |
           while IFS=$'\t' read -r type name file lines; do
             echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
           done
+
 
 
 
