@@ -24,23 +24,33 @@ jobs:
             -o json \
             --output-file checkov-results.json || true
 
-      - name:  Checkov Security Scan Summary
+      - name: Checkov Security Scan Summary
         run: |
-          FILE=checkov-results.json   # make sure this matches the actual name
+          # 0) Make sure the filename is correct
+          FILE=checkov-results.json        # ← adjust if your job writes a different name
 
+          # 1) Table header
           echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo ""                                   >> "$GITHUB_STEP_SUMMARY"
           echo '| 🔎 Type | 🧠 Check name | 📄 File | #️⃣ Lines |' >> "$GITHUB_STEP_SUMMARY"
           echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
 
+          # 2) Emit one TSV row per failed check
           jq -r -c -s '
-            .[]                                   # each {check_type, results,…}
-            | .check_type as $ctype
-            | (.results.failed_checks // [])[]    # only failed checks
+            # normalise: always iterate over an array of objects
+            (if type=="array" then . else [.] end)[]                # each check-type object
+
+            | .check_type as $ctype                                 # remember the scanner type
+
+            | (
+                .failed_checks                 //                    # new Checkov format
+                (.results.failed_checks // [])                       # legacy “results” wrapper
+              )[]?                                                   # “? ” keeps going if empty
+
             | [
                 $ctype,
                 (.check_name     // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-                (.file_path      // "—"),
+                (.file_path      // .file_abs_path // .repo_file_path // "—"),
                 ((.file_line_range // []) | map(tostring) | join("-"))
               ]
             | @tsv
