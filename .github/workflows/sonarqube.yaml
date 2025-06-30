@@ -25,166 +25,163 @@ jobs:
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout caller repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository }}
+        ref: ${{ github.ref }}
+        fetch-depth: 0
 
-      - name: Install SonarQube Scanner
-        run: |
-          curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-          unzip -q scanner.zip
+    - name: Install SonarQube Scanner
+      run: |
+        curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+        unzip -q scanner.zip
 
-      - name: Run SonarQube PR Analysis
-        id: scan
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          PR=${{ github.event.pull_request.number }}
-          SRC=${{ github.event.pull_request.head.ref }}
-          BASE=${{ github.event.pull_request.base.ref }}
-          SHA=${{ github.event.pull_request.head.sha }}
-          ./sonar-scanner-*/bin/sonar-scanner \
-            -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-            -Dsonar.host.url=$SONAR_HOST_URL \
-            -Dsonar.login=$SONAR_TOKEN \
-            -Dsonar.pullrequest.key=$PR \
-            -Dsonar.pullrequest.branch=$SRC \
-            -Dsonar.pullrequest.base=$BASE \
-            -Dsonar.scm.revision=$SHA \
-          2>&1 | tee scan.log
+    - name: Run SonarQube PR Analysis
+      id: scan
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        PR=${{ github.event.pull_request.number }}
+        SRC=${{ github.event.pull_request.head.ref }}
+        BASE=${{ github.event.pull_request.base.ref }}
+        SHA=${{ github.event.pull_request.head.sha }}
+        ./sonar-scanner-*/bin/sonar-scanner \
+          -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+          -Dsonar.host.url=$SONAR_HOST_URL \
+          -Dsonar.login=$SONAR_TOKEN \
+          -Dsonar.pullrequest.key=$PR \
+          -Dsonar.pullrequest.branch=$SRC \
+          -Dsonar.pullrequest.base=$BASE \
+          -Dsonar.scm.revision=$SHA \
+        2>&1 | tee scan.log
 
-      - name: Wait for analysis completion
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          TASK_ID=$(grep -o 'api/ce/task?id=[0-9a-f\-]\+' scan.log | head -1 | cut -d= -f2)
-          echo "Found CE task ID: $TASK_ID"
-          for i in $(seq 1 30); do
-            STATUS=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$TASK_ID" | jq -r .task.status)
-            echo "[$i] CE task status: $STATUS"
-            if [ "$STATUS" = "SUCCESS" ]; then break; fi
-            if [ "$STATUS" = "FAILED" ]; then echo "❌ CE task failed."; exit 1; fi
-            sleep 10
-          done
+    - name: Wait for analysis completion
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        TASK_ID=$(grep -o 'api/ce/task?id=[0-9a-f\-]\+' scan.log | head -1 | cut -d= -f2)
+        echo "Found CE task ID: $TASK_ID"
+        for i in $(seq 1 30); do
+          STATUS=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$TASK_ID" | jq -r .task.status)
+          echo "[$i] CE task status: $STATUS"
+          if [ "$STATUS" = "SUCCESS" ]; then break; fi
+          if [ "$STATUS" = "FAILED" ]; then echo "❌ CE task failed."; exit 1; fi
+          sleep 10
+        done
 
-      - name: Fetch issues for PR
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          PR=${{ github.event.pull_request.number }}
-          curl -s -u "$SONAR_TOKEN:" \
-            "$SONAR_HOST_URL/api/issues/search?componentKeys=$SONAR_PROJECT_KEY&pullRequest=$PR&types=BUG,VULNERABILITY,CODE_SMELL" \
-            -o issues.json
+    - name: Fetch issues for PR
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        PR=${{ github.event.pull_request.number }}
+        curl -s -u "$SONAR_TOKEN:" \
+          "$SONAR_HOST_URL/api/issues/search?componentKeys=$SONAR_PROJECT_KEY&pullRequest=$PR&types=BUG,VULNERABILITY,CODE_SMELL" \
+          -o issues.json
 
-      - name: Fetch coverage, duplication, hotspots count
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          PR=${{ github.event.pull_request.number }}
-          curl -s -u "$SONAR_TOKEN:" \
-            "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&pullRequest=$PR&metricKeys=coverage,duplicated_lines_density,security_hotspots" \
-            -o measures.json
+    - name: Fetch coverage, duplication, hotspots count
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        PR=${{ github.event.pull_request.number }}
+        curl -s -u "$SONAR_TOKEN:" \
+          "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&pullRequest=$PR&metricKeys=coverage,duplicated_lines_density,security_hotspots" \
+          -o measures.json
 
+    - name: Fetch Security Hotspots details
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        PR=${{ github.event.pull_request.number }}
+        curl -s -u "$SONAR_TOKEN:" \
+          "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
+          -o hotspots.json
 
-      - name: Fetch Security Hotspots details
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          PR=${{ github.event.pull_request.number }}
-          curl -s -u "$SONAR_TOKEN:" \
-            "$SONAR_HOST_URL/api/hotspots/search?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR" \
-            -o hotspots.json
+    - name: Generate PR comment
+      shell: bash
+      run: |
+        python3 - << 'EOF' > comment.md
+        import json, os
+        from collections import Counter
 
-      - name: Generate PR comment 
-        shell: bash
-        run: |
-          python3 - << 'EOF' > comment.md
-          import json, os
-          from collections import Counter
+        event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+        pr = str(event["number"])
+        issues = json.load(open('issues.json')).get('issues', [])[:50]
+        counts = Counter(i['severity'] for i in issues)
 
-          event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
-          pr = str(event["number"])
-          issues = json.load(open('issues.json')).get('issues', [])[:50]
-          counts = Counter(i['severity'] for i in issues)
+        # Quality metrics
+        measures = json.load(open('measures.json'))
+        ms = {m['metric']: m['value'] for m in measures['component']['measures']}
+        coverage = ms.get('coverage', '?')
+        duplication = ms.get('duplicated_lines_density', '?')
 
-          # Quality metrics
-          measures = json.load(open('measures.json'))
-          ms = {m['metric']: m['value'] for m in measures['component']['measures']}
-          coverage = ms.get('coverage', '?')
-          duplication = ms.get('duplicated_lines_density', '?')
+        print(f"## 📝 SonarQube Report for PR #{pr}\n")
 
-          print(f"## 📝 SonarQube Report for PR #{pr}\n")
+        print("### 📈 Quality Metrics")
+        print(f"- ✅ **Coverage**: `{coverage}%`")
+        print(f"- ♻️ **Duplicated Code**: `{duplication}%`\n")
 
-          print("### 📈 Quality Metrics")
-          print(f"- ✅ **Coverage**: `{coverage}%`")
-          print(f"- ♻️ **Duplicated Code**: `{duplication}%`\n")
+        print("### 🛡️ Issues by Severity\n")
+        severity_order = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']
+        colors = {
+            'BLOCKER': 'red',
+            'CRITICAL': 'orange',
+            'MAJOR': 'yellow',
+            'MINOR': 'blue',
+            'INFO': 'lightgray'
+        }
 
-          print("### 🛡️ Issues by Severity\n")
-          severity_order = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO']
-          colors = {
-              'BLOCKER': 'red',
-              'CRITICAL': 'orange',
-              'MAJOR': 'yellow',
-              'MINOR': 'blue',
-              'INFO': 'lightgray'
-          }
+        for sev in severity_order:
+            count = counts.get(sev, 0)
+            if count == 0:
+                continue
+            badge_url = f"https://img.shields.io/badge/{sev}-{count}-{colors[sev]}"
+            print(f'<details><summary><img src="{badge_url}" alt="{sev}" height="20"></summary>\n')
+            print("| Rule | File:Line | Message |")
+            print("|------|-----------|---------|")
+            for i in issues:
+                if i['severity'] == sev:
+                    comp = i['component'].split(":")[-1]
+                    line = i.get('line', '?')
+                    msg = i['message'].replace('\n', ' ')[:140]
+                    print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
+            print("</details>\n")
 
-          for sev in severity_order:
-              count = counts.get(sev, 0)
-              if count == 0:
-                  continue
-              badge_url = f"https://img.shields.io/badge/{sev}-{count}-{colors[sev]}"
-              print(f'<details><summary><img src="{badge_url}" alt="{sev}" height="20"></summary>\n')
-              print("| Rule | File:Line | Message |")
-              print("|------|-----------|---------|")
-              for i in issues:
-                  if i['severity'] == sev:
-                      comp = i['component'].split(":")[-1]
-                      line = i.get('line', '?')
-                      msg = i['message'].replace('\n', ' ')[:140]
-                      print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
-              print("</details>\n")
+        # Optional: Security Hotspots section
+        hotspots = json.load(open('hotspots.json')).get('hotspots', [])
+        if hotspots:
+            badge_url = f"https://img.shields.io/badge/Security_Hotspots-{len(hotspots)}-orange"
+            print(f'<details><summary><img src="{badge_url}" alt="Security Hotspots" height="20"></summary>\n')
+            print("| Status | Rule | File:Line | Message |")
+            print("|--------|------|-----------|---------|")
+            for h in hotspots:
+                rule = h.get("ruleKey", "unknown")
+                comp = h["component"].split(":")[-1]
+                line = h.get("line", "?")
+                status = h.get("status", "TO_REVIEW")
+                msg = h.get("message", "No message").replace("\n", " ")[:120]
+                print(f"| `{status}` | `{rule}` | `{comp}:{line}` | {msg} |")
+            print("</details>\n")
 
-          # Optional: Security Hotspots section
-          hotspots = json.load(open('hotspots.json')).get('hotspots', [])
-          if hotspots:
-              badge_url = f"https://img.shields.io/badge/Security_Hotspots-{len(hotspots)}-orange"
-              print(f'<details><summary><img src="{badge_url}" alt="Security Hotspots" height="20"></summary>\n')
-              print("| Status | Rule | File:Line | Message |")
-              print("|--------|------|-----------|---------|")
-              for h in hotspots:
-                  rule = h.get("ruleKey", "unknown")
-                  comp = h["component"].split(":")[-1]
-                  line = h.get("line", "?")
-                  status = h.get("status", "TO_REVIEW")
-                  msg = h.get("message", "No message").replace("\n", " ")[:120]
-                  print(f"| `{status}` | `{rule}` | `{comp}:{line}` | {msg} |")
-              print("</details>\n")
+        if not issues and not hotspots:
+            print("🎉 **No new issues or hotspots found on this PR! Great job!** 🎉")
 
-          if not issues and not hotspots:
-              print("🎉 **No new issues or hotspots found on this PR! Great job!** 🎉")
+        host = os.environ['SONAR_HOST_URL']
+        proj = os.environ['SONAR_PROJECT_KEY']
+        print(f"\n🔗 [**View full analysis on SonarQube**]({host}/dashboard?id={proj}&pullRequest={pr})")
+        EOF
 
-          host = os.environ['SONAR_HOST_URL']
-          proj = os.environ['SONAR_PROJECT_KEY']
-          print(f"\n🔗 [**View full analysis on SonarQube**]({host}/dashboard?id={proj}&pullRequest={pr})")
-          EOF
-
-
-
-
-
-      - name: Comment on PR
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('comment.md', 'utf8');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body,
-            });
+    - name: Comment on PR
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const body = fs.readFileSync('comment.md', 'utf8');
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.payload.pull_request.number,
+            body,
+          });
