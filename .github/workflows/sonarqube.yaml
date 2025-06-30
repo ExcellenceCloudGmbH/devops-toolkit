@@ -105,7 +105,7 @@ jobs:
         from collections import Counter
 
         event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
-        pr = str(event["number"])
+        pr = str(event["pull_request"]["number"])
         issues = json.load(open('issues.json')).get('issues', [])[:50]
         counts = Counter(i['severity'] for i in issues)
 
