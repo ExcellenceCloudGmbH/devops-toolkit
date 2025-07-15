@@ -34,7 +34,6 @@ jobs:
 
         echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
         echo "" >> "$GITHUB_STEP_SUMMARY"
-        # reordered header
         echo '| File | Lines | Type | Check name |' >> "$GITHUB_STEP_SUMMARY"
         echo '|------|-------|------|------------|' >> "$GITHUB_STEP_SUMMARY"
 
@@ -62,12 +61,10 @@ jobs:
             else
               anchor=""
             fi
-            link="[$file]($url$anchor)"
+            link="<a href=\"${url}${anchor}\" target=\"_blank\">${file}</a>"
           else
             link="—"
           fi
-
-          # reordered output
           echo "| $link | $lines | $type | $name |" >> "$GITHUB_STEP_SUMMARY"
         done
 

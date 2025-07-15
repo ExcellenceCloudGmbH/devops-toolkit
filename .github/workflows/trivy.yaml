@@ -120,7 +120,7 @@ jobs:
           clean="${target#./}"
           clean="${clean#/}"
           url="https://github.com/${REPO}/blob/${REF}/${clean}"
-          echo "| [${target}](${url}) | $type | $sev | $title | $msg | $res |" \
+          echo "| <a href=\"${url}\" target=\"_blank\">${target}</a> | $type | $sev | $title | $msg | $res |" \
             >> "$GITHUB_STEP_SUMMARY"
         done
 
