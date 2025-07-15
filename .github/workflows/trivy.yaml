@@ -12,11 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     name: Trivy Security Scan
 
+    # make repo & ref available everywhere
+    env:
+      REPO: ${{ github.repository }}
+      REF: ${{ github.ref_name }}
+
     steps:
     - name: Checkout caller repository
       uses: actions/checkout@v4
       with:
-        repository: ${{ github.repository }} # pulls the branch of the repo that triggered the reusable workflow
+        repository: ${{ github.repository }}
         ref: ${{ github.ref }}
 
     - name: Install Trivy via tarball
@@ -74,8 +79,14 @@ jobs:
               .fixed,
               .title
             ] | @tsv' trivy-results.json |
-        while IFS=$'\t' read -r tgt typ sev pkg inst fix title; do
-          echo "| $tgt | $typ | $sev | $pkg | $inst | $fix | $title |" >> "$GITHUB_STEP_SUMMARY"
+        while IFS=$'\t' read -r target type sev pkg inst fix title; do
+          # clean up leading slashes
+          clean="${target#./}"
+          clean="${clean#/}"
+          # build the URL against the dynamic repo & ref
+          url="https://github.com/${REPO}/blob/${REF}/${clean}"
+          echo "| [${target}](${url}) | $type | $sev | $pkg | $inst | $fix | $title |" \
+            >> "$GITHUB_STEP_SUMMARY"
         done
 
         echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -108,8 +119,12 @@ jobs:
               .message,
               .resolution
             ] | @tsv' trivy-results.json |
-        while IFS=$'\t' read -r tgt typ sev title msg res; do
-          echo "| $tgt | $typ | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
+        while IFS=$'\t' read -r target type sev title msg res; do
+          clean="${target#./}"
+          clean="${clean#/}"
+          url="https://github.com/${REPO}/blob/${REF}/${clean}"
+          echo "| [${target}](${url}) | $type | $sev | $title | $msg | $res |" \
+            >> "$GITHUB_STEP_SUMMARY"
         done
 
     - name: Upload Trivy JSON Report
