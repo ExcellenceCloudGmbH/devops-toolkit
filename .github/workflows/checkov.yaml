@@ -10,7 +10,7 @@ jobs:
     name: Checkov Security Scan
     env:
       REPO: ${{ github.repository }}
-      REF: ${{ github.ref_name }}
+      REF: ${{ github.head_ref || github.ref_name }}
 
     steps:
     - name: Checkout caller repository

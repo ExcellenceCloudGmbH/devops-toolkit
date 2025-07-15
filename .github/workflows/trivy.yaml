@@ -1,3 +1,4 @@
+# .github/workflows/trivy.yaml
 name: Trivy JSON Scan
 
 on:
@@ -11,11 +12,9 @@ jobs:
   trivy-scan:
     runs-on: ubuntu-latest
     name: Trivy Security Scan
-
-    # make repo & ref available everywhere
     env:
       REPO: ${{ github.repository }}
-      REF: ${{ github.ref_name }}
+      REF: ${{ github.head_ref || github.ref_name }}
 
     steps:
     - name: Checkout caller repository
@@ -80,10 +79,8 @@ jobs:
               .title
             ] | @tsv' trivy-results.json |
         while IFS=$'\t' read -r target type sev pkg inst fix title; do
-          # clean up leading slashes
           clean="${target#./}"
           clean="${clean#/}"
-          # build the URL against the dynamic repo & ref
           url="https://github.com/${REPO}/blob/${REF}/${clean}"
           echo "| [${target}](${url}) | $type | $sev | $pkg | $inst | $fix | $title |" \
             >> "$GITHUB_STEP_SUMMARY"
