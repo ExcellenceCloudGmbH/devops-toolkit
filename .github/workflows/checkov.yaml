@@ -5,60 +5,70 @@ jobs:
   checkov:
     runs-on: ubuntu-latest
     steps:
-      
-      - name: Checkout caller repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref:        ${{ github.ref }}
 
-      
-      - name: Install Checkov
-        run: pip install checkov
+    - name: Checkout caller repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository }}
+        ref: ${{ github.ref }}
 
-      
-      - name: Run Checkov and generate JSON
-        continue-on-error: true          # don’t fail the job yet
-        run: |
-          checkov -d . -o json > results_json.json || true  
+    - name: Install Checkov
+      run: pip install checkov
 
-      
-      - name:  Checkov Security Scan Summary
-        run: |
-          set -eo pipefail
-          FILE=results_json.json     
+    - name: Run Checkov and generate JSON
+      continue-on-error: true # don’t fail the job yet
+      run: |
+        checkov -d . -o json > results_json.json || true  
 
-          echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '| Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
-          echo '|---------|---------------|---------|----------|' >> "$GITHUB_STEP_SUMMARY"
+    - name: Checkov Security Scan Summary
+      run: |
+        set -eo pipefail
+        FILE=results_json.json
 
-          jq -r -c -s '
-            flatten                                  |   
-            .[]                                      |   
-            select(type=="object" and has("check_type")) |
-            .check_type as $ctype                    |
-            (.results.failed_checks // .failed_checks // [])[]? |
-            [
-              $ctype,
-              (.check_name // "—" | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-              (.file_path // .repo_file_path // .file_abs_path // "—"),
-              ((.file_line_range // []) | map(tostring) | join("-"))
-            ] |
-            @tsv
-          ' "$FILE" |
-          while IFS=$'\t' read -r type name file lines; do
-            echo "| $type | $name | $file | $lines |" >> "$GITHUB_STEP_SUMMARY"
-          done
+        echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo '| Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
+        echo '|------|------------|------|-------|' >> "$GITHUB_STEP_SUMMARY"
 
+        jq -r -c -s '
+          flatten |
+          .[] |
+          select(type=="object" and has("check_type")) |
+          .check_type as $ctype |
+          (.results.failed_checks // .failed_checks // [])[]? |
+          [
+            $ctype,
+            (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("\|";" ")),
+            (.file_path // .repo_file_path // .file_abs_path // "—"),
+            ((.file_line_range // []) | map(tostring) | join("-"))
+          ] |
+          @tsv
+        ' "$FILE" |
+        while IFS=$'\t' read -r type name file lines; do
+          if [ "$file" != "—" ]; then
+            # strip refs/heads/ so we get just the branch or tag name
+            refname=${GITHUB_REF#refs/heads/}
+            url="https://github.com/${GITHUB_REPOSITORY}/blob/${refname}/${file}"   
+            # build a line‐anchor if we have line numbers 
+            if [[ $lines == *-* ]]; then
+              anchor="#L${lines}"
+            elif [[ $lines =~ ^[0-9]+$ ]]; then
+              anchor="#L${lines}"
+            else
+              anchor=""
+            fi
+            link="[$file]($url$anchor)"
+          else
+            link="—"
+          fi
+          echo "| $type | $name | $link | $lines |" >> "$GITHUB_STEP_SUMMARY"
+        done
 
-   
-      - name: Upload Checkov JSON as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: checkov-results-json
-          path: results_json.json
+    - name: Upload Checkov JSON as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: checkov-results-json
+        path: results_json.json
 
-     
-      - name: Fail if vulnerabilities found
-        run: checkov -d .
+    - name: Fail if vulnerabilities found
+      run: checkov -d .
