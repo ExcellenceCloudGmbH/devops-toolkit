@@ -34,8 +34,9 @@ jobs:
 
         echo "### ✅ Checkov Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
         echo "" >> "$GITHUB_STEP_SUMMARY"
-        echo '| Type | Check name | File | Lines |' >> "$GITHUB_STEP_SUMMARY"
-        echo '|------|------------|------|-------|' >> "$GITHUB_STEP_SUMMARY"
+        # reordered header
+        echo '| File | Lines | Type | Check name |' >> "$GITHUB_STEP_SUMMARY"
+        echo '|------|-------|------|------------|' >> "$GITHUB_STEP_SUMMARY"
 
         jq -r -c -s '
           flatten
@@ -44,14 +45,14 @@ jobs:
           | .check_type as $ctype
           | (.results.failed_checks // .failed_checks // [])[]?
           | [
-              $ctype,
-              (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("[|]";" ")),
               (.file_path // .repo_file_path // .file_abs_path // "—"),
-              ((.file_line_range // []) | map(tostring) | join("-"))
+              ((.file_line_range // []) | map(tostring) | join("-")),
+              $ctype,
+              (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("[|]";" "))
             ]
           | @tsv
         ' "$FILE" |
-        while IFS=$'\t' read -r type name file lines; do
+        while IFS=$'\t' read -r file lines type name; do
           if [ "$file" != "—" ]; then
             clean="${file#./}"
             clean="${clean#/}"
@@ -65,7 +66,9 @@ jobs:
           else
             link="—"
           fi
-          echo "| $type | $name | $link | $lines |" >> "$GITHUB_STEP_SUMMARY"
+
+          # reordered output
+          echo "| $link | $lines | $type | $name |" >> "$GITHUB_STEP_SUMMARY"
         done
 
     - name: Upload Checkov JSON as artifact
