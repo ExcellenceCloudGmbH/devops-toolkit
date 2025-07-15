@@ -17,6 +17,7 @@ jobs:
 
     - name: Run Checkov and generate JSON
       continue-on-error: true # don’t fail the job yet
+
       run: |
         checkov -d . -o json > results_json.json || true  
 
