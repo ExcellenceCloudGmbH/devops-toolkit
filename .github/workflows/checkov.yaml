@@ -1,11 +1,12 @@
 name: Checkov JSON Scan
-on: workflow_call
+on:
+  workflow_call:
+
 
 jobs:
   checkov:
     runs-on: ubuntu-latest
     steps:
-
     - name: Checkout caller repository
       uses: actions/checkout@v4
       with:
@@ -16,9 +17,9 @@ jobs:
       run: pip install checkov
 
     - name: Run Checkov and generate JSON
-      continue-on-error: true # don’t fail the job yet
+      continue-on-error: true #don t fail the job   
       run: |
-        checkov -d . -o json > results_json.json || true  
+        checkov -d . -o json > results_json.json || true
 
     - name: Checkov Security Scan Summary
       run: |
@@ -38,7 +39,7 @@ jobs:
           (.results.failed_checks // .failed_checks // [])[]? |
           [
             $ctype,
-            (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("\|";" ")),
+            (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("[|]";" ")),
             (.file_path // .repo_file_path // .file_abs_path // "—"),
             ((.file_line_range // []) | map(tostring) | join("-"))
           ] |
@@ -46,10 +47,8 @@ jobs:
         ' "$FILE" |
         while IFS=$'\t' read -r type name file lines; do
           if [ "$file" != "—" ]; then
-            # strip refs/heads/ so we get just the branch or tag name
             refname=${GITHUB_REF#refs/heads/}
             url="https://github.com/${GITHUB_REPOSITORY}/blob/${refname}/${file}"
-            # build a line‐anchor if we have line numbers
             if [[ $lines == *-* ]]; then
               anchor="#L${lines}"
             elif [[ $lines =~ ^[0-9]+$ ]]; then
