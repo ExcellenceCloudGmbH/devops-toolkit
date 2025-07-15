@@ -17,7 +17,6 @@ jobs:
 
     - name: Run Checkov and generate JSON
       continue-on-error: true # don’t fail the job yet
-
       run: |
         checkov -d . -o json > results_json.json || true  
 
@@ -49,8 +48,8 @@ jobs:
           if [ "$file" != "—" ]; then
             # strip refs/heads/ so we get just the branch or tag name
             refname=${GITHUB_REF#refs/heads/}
-            url="https://github.com/${GITHUB_REPOSITORY}/blob/${refname}/${file}"   
-            # build a line‐anchor if we have line numbers 
+            url="https://github.com/${GITHUB_REPOSITORY}/blob/${refname}/${file}"
+            # build a line‐anchor if we have line numbers
             if [[ $lines == *-* ]]; then
               anchor="#L${lines}"
             elif [[ $lines =~ ^[0-9]+$ ]]; then
