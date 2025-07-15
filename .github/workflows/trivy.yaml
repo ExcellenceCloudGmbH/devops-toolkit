@@ -3,6 +3,7 @@ name: Trivy JSON Scan
 on:
   workflow_call:
 
+
 permissions:
   contents: read
 
@@ -12,124 +13,115 @@ jobs:
     name: Trivy Security Scan
 
     steps:
-      - name: Checkout caller repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}  #  pulls the branch of the repo that triggered the reusable workflow
-          ref: ${{ github.ref }}
+    - name: Checkout caller repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository }} # pulls the branch of the repo that triggered the reusable workflow
+        ref: ${{ github.ref }}
 
-      - name: Install Trivy 
-        run: |
-          sudo apt-get update
-          sudo apt-get install wget curl -y
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep "tag_name" | cut -d '"' -f 4)
-          wget -q "https://github.com/aquasecurity/trivy/releases/download/${LATEST_VERSION}/trivy_${LATEST_VERSION#v}_Linux-64bit.deb"
-          sudo dpkg -i trivy_${LATEST_VERSION#v}_Linux-64bit.deb
+    - name: Install Trivy via tarball
+      run: |
+        set -eo pipefail
+        LATEST=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest \
+          | jq -r .tag_name)
+        curl -sSL \
+          https://github.com/aquasecurity/trivy/releases/download/${LATEST}/trivy_${LATEST#v}_Linux-64bit.tar.gz \
+          | sudo tar -xzC /usr/local/bin trivy
+        trivy --version
 
+    - name: Run Trivy (JSON output)
+      continue-on-error: true
+      run: |
+        trivy fs . \
+          --scanners vuln,config,secret,license \
+          --format json \
+          --output trivy-results.json
 
-      - name: Run Trivy (JSON output)
-        continue-on-error: true
-        run: |
-          trivy fs . \
-            --scanners vuln,config,secret,license \
-            --format json \
-            --output trivy-results.json
+    - name: Trivy Security Scan Summary
+      run: |
+        set -eo pipefail
+        echo "### 🔍 Trivy Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Trivy Security Scan Summary
-        run: |
+        echo "#### ⚠️ Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
+        echo '| Target | Type | Severity | Package | Installed | Fixed | Title |' >> "$GITHUB_STEP_SUMMARY"
+        echo '|--------|------|----------|---------|-----------|-------|-------|' >> "$GITHUB_STEP_SUMMARY"
 
-          echo "### 🔍 Trivy Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+        jq -r '
+          .Results[]?
+          | select(.Vulnerabilities)
+          | . as $r
+          | .Vulnerabilities[]
+          | {
+              target:    $r.Target,
+              type:      $r.Type,
+              severity:  .Severity,
+              pkg:       .PkgName,
+              installed: .InstalledVersion,
+              fixed:     (.FixedVersion // "—"),
+              title:     (.Title | gsub("[\r\n]+";" ") | gsub("[|]";" "))
+            }
+          | [
+              .target,
+              .type,
+              (if .severity=="CRITICAL" then "🛑 CRITICAL"
+               elif .severity=="HIGH"   then "🔴 HIGH"
+               elif .severity=="MEDIUM" then "🟡 MEDIUM"
+               elif .severity=="LOW"    then "🟢 LOW"
+               else "⚪ UNKNOWN" end),
+              .pkg,
+              .installed,
+              .fixed,
+              .title
+            ] | @tsv' trivy-results.json |
+        while IFS=$'\t' read -r tgt typ sev pkg inst fix title; do
+          echo "| $tgt | $typ | $sev | $pkg | $inst | $fix | $title |" >> "$GITHUB_STEP_SUMMARY"
+        done
 
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "#### 🔧 Misconfigurations" >> "$GITHUB_STEP_SUMMARY"
+        echo '| Target | Type | Severity | Title | Message | Resolution |' >> "$GITHUB_STEP_SUMMARY"
+        echo '|--------|------|----------|-------|---------|------------|' >> "$GITHUB_STEP_SUMMARY"
 
-          echo "#### ⚠️ Vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
-          echo '|  Target |  Type |  Severity |  Package | Installed |  Fixed | Title |' >> "$GITHUB_STEP_SUMMARY"
-          echo '|-----------|---------|-------------|-----------|--------------|----------|----------|' >> "$GITHUB_STEP_SUMMARY"
+        jq -r '
+          .Results[]?
+          | select(.Misconfigurations)
+          | . as $r
+          | .Misconfigurations[]
+          | {
+              target:     $r.Target,
+              type:       $r.Type,
+              severity:   .Severity,
+              title:      (.Title     | gsub("[\r\n]+";" ") | gsub("[|]";" ")),
+              message:    (.Message   | gsub("[\r\n]+";" ") | gsub("[|]";" ")),
+              resolution: (.Resolution| gsub("[\r\n]+";" ") | gsub("[|]";" "))
+            }
+          | [
+              .target,
+              .type,
+              (if .severity=="CRITICAL" then "🛑 CRITICAL"
+               elif .severity=="HIGH"   then "🔴 HIGH"
+               elif .severity=="MEDIUM" then "🟡 MEDIUM"
+               elif .severity=="LOW"    then "🟢 LOW"
+               else "⚪ UNKNOWN" end),
+              .title,
+              .message,
+              .resolution
+            ] | @tsv' trivy-results.json |
+        while IFS=$'\t' read -r tgt typ sev title msg res; do
+          echo "| $tgt | $typ | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
+        done
 
-          jq -r '
-            .Results[]?
-            | select(.Vulnerabilities)
-            | . as $r
-            | .Vulnerabilities[]
-            | {
-                target:    $r.Target,
-                type:      $r.Type,
-                severity:  .Severity,
-                pkg:       .PkgName,
-                installed: .InstalledVersion,
-                fixed:     (.FixedVersion // "—"),
-                title:     (.Title | gsub("[\\r\\n]+";" ") | gsub("\\|";" "))
-              }
-            | [
-                .target,
-                .type,
-                (if .severity=="CRITICAL" then "🛑 CRITICAL"
-                elif .severity=="HIGH"   then "🔴 HIGH"
-                elif .severity=="MEDIUM" then "🟡 MEDIUM"
-                elif .severity=="LOW"    then "🟢 LOW"
-                else "⚪ UNKNOWN" end),
-                .pkg,
-                .installed,
-                .fixed,
-                .title
-              ] | @tsv' trivy-results.json |
-            while IFS=$'\t' read -r tgt typ sev pkg inst fix title; do
-              echo "| $tgt | $typ | $sev | $pkg | $inst | $fix | $title |" >> "$GITHUB_STEP_SUMMARY"
-            done
+    - name: Upload Trivy JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-results-json
+        path: trivy-results.json
 
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "#### 🔧 Misconfigurations" >> "$GITHUB_STEP_SUMMARY"
-          echo '| Target |  Type |  Severity |  Title |  Message |  Resolution |' >> "$GITHUB_STEP_SUMMARY"
-          echo '|-----------|---------|-------------|----------|-----------|----------------|' >> "$GITHUB_STEP_SUMMARY"
-
-          jq -r '
-            .Results[]?
-            | select(.Misconfigurations)
-            | . as $r
-            | .Misconfigurations[]
-            | {
-                target:     $r.Target,
-                type:       $r.Type,
-                severity:   .Severity,
-                title:      (.Title     | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-                message:    (.Message   | gsub("[\\r\\n]+";" ") | gsub("\\|";" ")),
-                resolution: (.Resolution| gsub("[\\r\\n]+";" ") | gsub("\\|";" "))
-              }
-            | [
-                .target,
-                .type,
-                (if .severity=="CRITICAL" then "🛑 CRITICAL"
-                elif .severity=="HIGH"   then "🔴 HIGH"
-                elif .severity=="MEDIUM" then "🟡 MEDIUM"
-                elif .severity=="LOW"    then "🟢 LOW"
-                else "⚪ UNKNOWN" end),
-                .title,
-                .message,
-                .resolution
-              ] | @tsv' trivy-results.json |
-            while IFS=$'\t' read -r tgt typ sev title msg res; do
-              echo "| $tgt | $typ | $sev | $title | $msg | $res |" >> "$GITHUB_STEP_SUMMARY"
-            done
-
-
-
-
-
-
-
-      - name: Upload Trivy JSON Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-results-json
-          path: trivy-results.json
-
-
-      - name: Fail if vulnerabilities found
-        run: |
-          trivy fs . \
-            --scanners vuln,config,secret,license \
-            --exit-code 1 \
-            --severity CRITICAL,HIGH \
-            --no-progress
-
+    - name: Fail if vulnerabilities found
+      run: |
+        trivy fs . \
+          --scanners vuln,config,secret,license \
+          --exit-code 1 \
+          --severity CRITICAL,HIGH \
+          --no-progress
