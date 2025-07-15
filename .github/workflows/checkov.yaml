@@ -1,4 +1,5 @@
 name: Checkov JSON Scan
+
 on:
   workflow_call:
 
@@ -6,6 +7,11 @@ on:
 jobs:
   checkov:
     runs-on: ubuntu-latest
+    name: Checkov Security Scan
+    env:
+      REPO: ${{ github.repository }}
+      REF: ${{ github.ref_name }}
+
     steps:
     - name: Checkout caller repository
       uses: actions/checkout@v4
@@ -17,7 +23,7 @@ jobs:
       run: pip install checkov
 
     - name: Run Checkov and generate JSON
-      continue-on-error: true #don t fail the job   
+      continue-on-error: true
       run: |
         checkov -d . -o json > results_json.json || true
 
@@ -32,26 +38,25 @@ jobs:
         echo '|------|------------|------|-------|' >> "$GITHUB_STEP_SUMMARY"
 
         jq -r -c -s '
-          flatten |
-          .[] |
-          select(type=="object" and has("check_type")) |
-          .check_type as $ctype |
-          (.results.failed_checks // .failed_checks // [])[]? |
-          [
-            $ctype,
-            (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("[|]";" ")),
-            (.file_path // .repo_file_path // .file_abs_path // "—"),
-            ((.file_line_range // []) | map(tostring) | join("-"))
-          ] |
-          @tsv
+          flatten
+          | .[]
+          | select(type=="object" and has("check_type"))
+          | .check_type as $ctype
+          | (.results.failed_checks // .failed_checks // [])[]?
+          | [
+              $ctype,
+              (.check_name // "—" | gsub("[\r\n]+";" ") | gsub("[|]";" ")),
+              (.file_path // .repo_file_path // .file_abs_path // "—"),
+              ((.file_line_range // []) | map(tostring) | join("-"))
+            ]
+          | @tsv
         ' "$FILE" |
         while IFS=$'\t' read -r type name file lines; do
           if [ "$file" != "—" ]; then
-            refname=${GITHUB_REF#refs/heads/}
-            url="https://github.com/${GITHUB_REPOSITORY}/blob/${refname}/${file}"
-            if [[ $lines == *-* ]]; then
-              anchor="#L${lines}"
-            elif [[ $lines =~ ^[0-9]+$ ]]; then
+            clean="${file#./}"
+            clean="${clean#/}"
+            url="https://github.com/${REPO}/blob/${REF}/${clean}"
+            if [[ $lines =~ ^[0-9]+(-[0-9]+)?$ ]]; then
               anchor="#L${lines}"
             else
               anchor=""
