@@ -71,6 +71,7 @@ jobs:
         done
 
     - name: Fetch issues for PR
+      if: ${{ github.event_name == 'pull_request' }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
@@ -80,6 +81,7 @@ jobs:
           -o issues.json
 
     - name: Fetch coverage, duplication, hotspots count
+      if: ${{ github.event_name == 'pull_request' }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
@@ -98,6 +100,7 @@ jobs:
           -o hotspots.json
 
     - name: Generate PR comment
+      if: ${{ github.event_name == 'pull_request' }}
       shell: bash
       run: |
         python3 - << 'EOF' > comment.md
