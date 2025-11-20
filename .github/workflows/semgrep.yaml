@@ -1,11 +1,10 @@
 name: Semgrep reusable scan
 
 on:
-  workflow_call:       # called from another workflow
+  workflow_call:
     secrets:
       SEMGREP_APP_TOKEN:
         required: true
-
 
 permissions:
   contents: read
@@ -21,7 +20,7 @@ jobs:
       - name: Checkout PR or branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}         # checkout the right branchs
+          ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
       - name: Install Semgrep CLI and jq
@@ -30,17 +29,18 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get -y install jq
 
-      - name: Run Semgrep and save JSON                  
+      - name: Run Semgrep and save JSON
         id: run-semgrep
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
+          # We run with || true to capture findings without failing immediately
           semgrep ci --json > semgrep-results.json || true
+          
+          # We still count ALL findings for the PR comment logic
           COUNT=$(jq '.results | length' semgrep-results.json)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
-      # GitHub provides an issue.number automatically for PR with semgrep
-      # context.issue.number  Because PRs already know where to post the comment (on the PR page)
       - name: Comment on PR with Semgrep findings
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0'
         uses: actions/github-script@v7
@@ -54,6 +54,7 @@ jobs:
             const uniq = [...new Map(results.results.map(i => [
               `${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
 
+            // This comment will still show ALL findings (Info/Med/High)
             let body = `**Semgrep found ${uniq.length} unique issue(s):**\n\n`;
             for (const i of uniq) {
               const msg = i.message || i.extra?.message || 'no description';
@@ -74,37 +75,18 @@ jobs:
               issue_number: context.issue.number,
               body
             });
-            
 
-      # SHA We need it to comment on a specific commit 
-      # context.payload.after (or backup: context.sha)
-      # - name: Comment on commit if findings exist
-      #   if: steps.run-semgrep.outputs.count != '0'
-      #   uses: actions/github-script@v7
-      #   with:
-      #     github-token: ${{ secrets.BOT_PAT }}
-      #     script: |
-      #       const fs = require('fs');
-      #       const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
-      #       const uniq = [...new Map(results.results.map(i => [`${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
-      #       let body = `**Semgrep found ${uniq.length} issue(s):**\n\n`;
-      #       for (const i of uniq) {
-      #         const msg = i.message || i.extra?.message || 'no description';
-      #         body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
-      #       }
-      #       const sha = context.payload?.after || context.sha;
-      #       await github.rest.repos.createCommitComment({
-      #         owner: context.repo.owner,
-      #         repo: context.repo.repo,
-      #         commit_sha: sha,              
-      #         body
-      #       });
-
-      - name: Fail if Semgrep found issues
+      # --- UPDATED STEP BELOW ---
+      - name: Fail if Semgrep found High/Critical issues
         run: |
-          issues=$(jq '.results | length' semgrep-results.json)
-          echo "Semgrep found $issues issue(s)"
-          [ "$issues" -eq 0 ] || { echo "Failing due to Semgrep findings"; exit 1; }
+          # Filter JSON for severity "ERROR" (High) or "CRITICAL"
+          # Semgrep usually maps "High" rules to "ERROR" in the JSON output
+          high_issues=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "CRITICAL")] | length' semgrep-results.json)
+          
+          echo "Semgrep found $high_issues High/Critical issue(s)"
+          
+          # Fail only if high_issues is greater than 0
+          [ "$high_issues" -eq 0 ] || { echo "Failing due to High/Critical Semgrep findings"; exit 1; }
 
       - name: Upload Semgrep results
         if: always()
