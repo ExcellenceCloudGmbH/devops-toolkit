@@ -23,6 +23,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write  # Required to upload SARIF results
 
 
 
