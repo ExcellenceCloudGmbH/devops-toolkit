@@ -17,6 +17,8 @@ on:
         required: true
       SEMGREP_APP_TOKEN:
         required: true
+      ARTIFACT_PASSWORD:
+        required: true
 
 permissions:
   contents: read
@@ -40,4 +42,5 @@ jobs:
       isRepoPublic: ${{ inputs.isRepoPublic }}
     secrets:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_PASSWORD }}
 
