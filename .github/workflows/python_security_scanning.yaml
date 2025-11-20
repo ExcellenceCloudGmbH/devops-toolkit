@@ -36,7 +36,7 @@ jobs:
   semgrep-scan:
     uses: ./.github/workflows/semgrep.yaml
     with: 
-      encryption: ${{ inputs.isRepoPublic }}
+      isRepoPublic: ${{ inputs.isRepoPublic }}
     secrets:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
