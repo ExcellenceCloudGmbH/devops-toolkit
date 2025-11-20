@@ -23,7 +23,7 @@ jobs:
   semgrep:
     runs-on: ubuntu-latest
     env:
-      SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud/projects
+      SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud-gmbh/projects
 
     steps:
       - name: Checkout PR or branch
@@ -68,7 +68,7 @@ jobs:
               body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
             }
 
-            const org = "excellence-cloud";
+            const org = "excellence-cloud-gmbh";
             const repo = encodeURIComponent(`${context.repo.owner}/${context.repo.repo}`);
             const ref = encodeURIComponent(context.ref);
             const scanUrl = `https://semgrep.dev/orgs/${org}/findings?repo=${repo}&ref=${ref}`;
