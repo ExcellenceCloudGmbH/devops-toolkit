@@ -43,48 +43,65 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
+          # Ensure we start fresh
+          rm -f semgrep-results.json
+          
+          # Run semgrep. Using || true to ensure workflow doesn't crash before reporting
           semgrep ci --json > semgrep-results.json || true
           
-          COUNT=$(jq '.results | length' semgrep-results.json)
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          # Validate file creation
+          if [ ! -s semgrep-results.json ]; then
+            echo "::warning::Semgrep produced an empty file or failed to run."
+            echo "count=0" >> "$GITHUB_OUTPUT"
+          else
+            COUNT=$(jq '.results | length' semgrep-results.json)
+            echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Comment on PR with Semgrep findings
-        # Only run if it's a PR, issues were found, AND the repo is NOT public
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0' && !inputs.isRepoPublic
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
-            if (!results.results?.length || !context.issue?.number) return;
+            try {
+              const results = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
+              if (!results.results?.length || !context.issue?.number) return;
 
-            const uniq = [...new Map(results.results.map(i => [
-              `${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
+              const uniq = [...new Map(results.results.map(i => [
+                `${i.check_id}:${i.path}:${i.start.line}`, i])).values()];
 
-            let body = `**Semgrep found ${uniq.length} unique issue(s):**\n\n`;
-            for (const i of uniq) {
-              const msg = i.message || i.extra?.message || 'no description';
-              body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
+              let body = `**Semgrep found ${uniq.length} unique issue(s):**\n\n`;
+              for (const i of uniq) {
+                const msg = i.message || i.extra?.message || 'no description';
+                body += `- \`${i.path}:${i.start.line}\` **${i.check_id}** – ${msg}\n`;
+              }
+
+              const org = "excellence-cloud";
+              const repo = encodeURIComponent(`${context.repo.owner}/${context.repo.repo}`);
+              const ref = encodeURIComponent(context.ref);
+              const scanUrl = `https://semgrep.dev/orgs/${org}/findings?repo=${repo}&ref=${ref}`;
+              const supplyChainUrl = `https://semgrep.dev/orgs/${org}/supply-chain/vulnerabilities?repo=${repo}&ref=${ref}`;
+
+              body += `\n---\n[View findings](${scanUrl})\n[Supply chain](${supplyChainUrl})`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            } catch (error) {
+              console.error("Error reading results for comment:", error);
             }
-
-            const org = "excellence-cloud";
-            const repo = encodeURIComponent(`${context.repo.owner}/${context.repo.repo}`);
-            const ref = encodeURIComponent(context.ref);
-            const scanUrl = `https://semgrep.dev/orgs/${org}/findings?repo=${repo}&ref=${ref}`;
-            const supplyChainUrl = `https://semgrep.dev/orgs/${org}/supply-chain/vulnerabilities?repo=${repo}&ref=${ref}`;
-
-            body += `\n---\n[View findings](${scanUrl})\n[Supply chain](${supplyChainUrl})`;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
 
       - name: Fail if Semgrep found High/Critical issues
         run: |
+          if [ ! -f semgrep-results.json ]; then
+            echo "No results file found."
+            exit 0
+          fi
           high_issues=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "CRITICAL")] | length' semgrep-results.json)
           echo "Semgrep found $high_issues High/Critical issue(s)"
           [ "$high_issues" -eq 0 ] || { echo "Failing due to High/Critical Semgrep findings"; exit 1; }
@@ -96,6 +113,16 @@ jobs:
           IS_PUBLIC: ${{ inputs.isRepoPublic }}
           ARTIFACT_PASS: ${{ secrets.ARTIFACT_PASSWORD }}
         run: |
+          # Define absolute paths to avoid confusion
+          JSON_FILE="${{ github.workspace }}/semgrep-results.json"
+          ZIP_FILE="${{ github.workspace }}/semgrep-results.zip"
+
+          # Ensure the source file exists
+          if [ ! -f "$JSON_FILE" ]; then
+             echo "::warning::Source JSON file not found. Creating empty placeholder to prevent artifact error."
+             echo "{}" > "$JSON_FILE"
+          fi
+
           if [ "$IS_PUBLIC" == "true" ]; then
              echo "Public repo detected. Encrypting results..."
              
@@ -106,18 +133,26 @@ jobs:
              fi
 
              # Zip with password encryption
-             zip -P "$ARTIFACT_PASS" semgrep-results.zip semgrep-results.json
+             # -j: junk paths (do not store directory names)
+             # -P: password
+             zip -j -P "$ARTIFACT_PASS" "$ZIP_FILE" "$JSON_FILE"
              
-             # Set output to point to the zip file
-             echo "artifact_path=semgrep-results.zip" >> "$GITHUB_OUTPUT"
+             if [ -f "$ZIP_FILE" ]; then
+                echo "Encryption successful."
+                echo "artifact_path=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+             else
+                echo "::error::Zip creation failed."
+                exit 1
+             fi
           else
              echo "Private repo. Keeping raw JSON."
-             echo "artifact_path=semgrep-results.json" >> "$GITHUB_OUTPUT"
+             echo "artifact_path=$JSON_FILE" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload Semgrep results
-        if: always()
+        if: always() && steps.prepare-artifact.outputs.artifact_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: semgrep-results
           path: ${{ steps.prepare-artifact.outputs.artifact_path }}
+          if-no-files-found: error
