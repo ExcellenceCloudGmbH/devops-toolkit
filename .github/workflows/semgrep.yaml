@@ -90,34 +90,50 @@ jobs:
           [ "$high_issues" -eq 0 ] || { echo "Failing due to High/Critical Semgrep findings"; exit 1; }
 
       - name: Prepare Artifacts
-        if: always()
+        if: always() # Ensures this runs even if the previous step failed
         id: prepare-artifact
         env:
           IS_PUBLIC: ${{ inputs.isRepoPublic }}
           ARTIFACT_PASS: ${{ secrets.ARTIFACT_PASSWORD }}
         run: |
+          # 1. Verify the input JSON exists and has content
+          if [ ! -s semgrep-results.json ]; then
+             echo "::warning::semgrep-results.json is missing or empty (0 bytes). creating placeholder."
+             echo '{"results": [], "error": "Scan failed to generate output"}' > semgrep-results.json
+          fi
+
           if [ "$IS_PUBLIC" == "true" ]; then
              echo "Public repo detected. Encrypting results..."
              
-             # Check if password secret was provided
              if [ -z "$ARTIFACT_PASS" ]; then
                echo "::error::Repo is public but ARTIFACT_PASSWORD secret is missing!"
                exit 1
              fi
 
-             # Zip with password encryption
-             zip -P "$ARTIFACT_PASS" semgrep-results.zip semgrep-results.json
+             # 2. Zip with explicit password and verbose output
+             # We use -j (junk paths) to ensure the file is at the root of the zip
+             zip -P "$ARTIFACT_PASS" -j semgrep-results.zip semgrep-results.json
              
-             # Set output to point to the zip file
+             # 3. Verify the ZIP was created and has size
+             if [ ! -s semgrep-results.zip ]; then
+                 echo "::error::Zip creation failed! File is empty."
+                 exit 1
+             fi
+             
              echo "artifact_path=semgrep-results.zip" >> "$GITHUB_OUTPUT"
           else
              echo "Private repo. Keeping raw JSON."
              echo "artifact_path=semgrep-results.json" >> "$GITHUB_OUTPUT"
           fi
+          
+          # Debug: List files to confirm size in logs
+          ls -lh semgrep-results*
 
       - name: Upload Semgrep results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: semgrep-results
+          # Rename the artifact to avoid "semgrep-results.zip" inside "semgrep-results.zip" confusion
+          name: semgrep-scan-findings
           path: ${{ steps.prepare-artifact.outputs.artifact_path }}
+          retention-days: 5
