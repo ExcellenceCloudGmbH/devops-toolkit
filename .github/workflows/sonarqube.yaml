@@ -6,6 +6,11 @@ on:
       projectKey:
         required: true
         type: string
+      isRepoPublic:
+        description: "Set to true if the calling repository is public"
+        required: true
+        type: boolean
+        default: false
     secrets:
       SONAR_TOKEN:
         required: true
@@ -71,7 +76,8 @@ jobs:
         done
 
     - name: Fetch issues for PR
-      if: ${{ github.event_name == 'pull_request' }}
+      # Only fetch issues if we plan to comment (i.e., NOT public)
+      if: ${{ github.event_name == 'pull_request' && !inputs.isRepoPublic }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
@@ -81,7 +87,8 @@ jobs:
           -o issues.json
 
     - name: Fetch coverage, duplication, hotspots count
-      if: ${{ github.event_name == 'pull_request' }}
+      # Only fetch metrics if we plan to comment (i.e., NOT public)
+      if: ${{ github.event_name == 'pull_request' && !inputs.isRepoPublic }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
@@ -91,6 +98,8 @@ jobs:
           -o measures.json
 
     - name: Fetch Security Hotspots details
+      # Only fetch hotspots if we plan to comment (i.e., NOT public)
+      if: ${{ github.event_name == 'pull_request' && !inputs.isRepoPublic }}
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
@@ -100,7 +109,8 @@ jobs:
           -o hotspots.json
 
     - name: Generate PR comment
-      if: ${{ github.event_name == 'pull_request' }}
+      # Skip completely if public
+      if: ${{ github.event_name == 'pull_request' && !inputs.isRepoPublic }}
       shell: bash
       run: |
         python3 - << 'EOF' > comment.md
@@ -150,7 +160,7 @@ jobs:
                     print(f"| `{i['rule']}` | `{comp}:{line}` | {msg} |")
             print("</details>\n")
 
-        # Optional: Security Hotspots section
+        # Security Hotspots section
         hotspots = json.load(open('hotspots.json')).get('hotspots', [])
         if hotspots:
             badge_url = f"https://img.shields.io/badge/Security_Hotspots-{len(hotspots)}-orange"
@@ -175,7 +185,8 @@ jobs:
         EOF
 
     - name: Comment on PR
-      if: ${{ github.event_name == 'pull_request' }}
+      # Skip completely if public
+      if: ${{ github.event_name == 'pull_request' && !inputs.isRepoPublic }}
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
