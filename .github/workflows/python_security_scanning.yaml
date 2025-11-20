@@ -6,6 +6,10 @@ on:
       sonarProjectKey:
         required: true
         type: string
+      isRepoPublic:
+        required: false
+        type: boolean
+        default: false
     secrets:
       SONAR_TOKEN:
         required: true
@@ -31,6 +35,8 @@ jobs:
 
   semgrep-scan:
     uses: ./.github/workflows/semgrep.yaml
+    with: 
+      encryption: ${{ inputs.isRepoPublic }}
     secrets:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
