@@ -18,9 +18,12 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write # Required to upload SARIF to GitHub
 
 jobs:
   semgrep:
+    # We stay on ubuntu-latest (VM) to ensure 'checkout' and 'upload-artifact' work reliably,
+    # but we use 'docker run' for the actual scanning tool.
     runs-on: ubuntu-latest
     env:
       SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud-gmbh/projects
@@ -32,24 +35,60 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
-      - name: Install Semgrep CLI and jq
+      - name: Install jq and zip
         run: |
-          pip install semgrep
           sudo apt-get -qq update
           sudo apt-get -y install jq zip
 
-      - name: Run Semgrep and save JSON
+      - name: Run Semgrep (JSON Output)
         id: run-semgrep
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
-          semgrep ci --json > semgrep-results.json || true
-          
+          # 1. Run Semgrep using the official Docker image
+          # We map current directory ($(pwd)) to /src inside the container
+          docker run --rm \
+            -v "$(pwd):/src" \
+            -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
+            -e SEMGREP_CLOUD_URL="$SEMGREP_CLOUD_URL" \
+            returntocorp/semgrep \
+            semgrep ci --json --output semgrep-results.json || true
+
+          # 2. Fix permissions (Docker creates files as root, we need runner ownership)
+          sudo chown -R $USER:$USER semgrep-results.json
+
+          # 3. Check results count (Existing Logic)
           COUNT=$(jq '.results | length' semgrep-results.json)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
+      # IMPROVEMENT 1: Generate SARIF (Only if repo is PRIVATE)
+      - name: Generate SARIF Report
+        if: inputs.isRepoPublic == false
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: |
+          # We run a second pass for SARIF. 
+          # Note: We use --sarif flag. This allows GitHub Code Scanning integration.
+          docker run --rm \
+            -v "$(pwd):/src" \
+            -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
+            -e SEMGREP_CLOUD_URL="$SEMGREP_CLOUD_URL" \
+            returntocorp/semgrep \
+            semgrep ci --sarif --output semgrep.sarif || true
+            
+          sudo chown -R $USER:$USER semgrep.sarif
+
+      # IMPROVEMENT 1: Upload SARIF to GitHub (Only if repo is PRIVATE)
+      - name: Upload SARIF to GitHub Security Dashboard
+        if: inputs.isRepoPublic == false && steps.run-semgrep.outputs.count != '0'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+        continue-on-error: true
+
       - name: Comment on PR with Semgrep findings
-        # Only run if it's a PR, issues were found, AND the repo is NOT public
+        # Logic maintained: Only run if PR + Issues Found + Not Public
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0' && !inputs.isRepoPublic
         uses: actions/github-script@v7
         with:
@@ -90,13 +129,12 @@ jobs:
           [ "$high_issues" -eq 0 ] || { echo "Failing due to High/Critical Semgrep findings"; exit 1; }
 
       - name: Prepare Artifacts
-        if: always() # Ensures this runs even if the previous step failed
+        if: always()
         id: prepare-artifact
         env:
           IS_PUBLIC: ${{ inputs.isRepoPublic }}
           ARTIFACT_PASS: ${{ secrets.ARTIFACT_PASSWORD }}
         run: |
-          # 1. Verify the input JSON exists and has content
           if [ ! -s semgrep-results.json ]; then
              echo "::warning::semgrep-results.json is missing or empty (0 bytes). creating placeholder."
              echo '{"results": [], "error": "Scan failed to generate output"}' > semgrep-results.json
@@ -110,11 +148,8 @@ jobs:
                exit 1
              fi
 
-             # 2. Zip with explicit password and verbose output
-             # We use -j (junk paths) to ensure the file is at the root of the zip
              zip -P "$ARTIFACT_PASS" -j semgrep-results.zip semgrep-results.json
              
-             # 3. Verify the ZIP was created and has size
              if [ ! -s semgrep-results.zip ]; then
                  echo "::error::Zip creation failed! File is empty."
                  exit 1
@@ -126,14 +161,12 @@ jobs:
              echo "artifact_path=semgrep-results.json" >> "$GITHUB_OUTPUT"
           fi
           
-          # Debug: List files to confirm size in logs
           ls -lh semgrep-results*
 
       - name: Upload Semgrep results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          # Rename the artifact to avoid "semgrep-results.zip" inside "semgrep-results.zip" confusion
           name: semgrep-scan-findings
           path: ${{ steps.prepare-artifact.outputs.artifact_path }}
           retention-days: 5
