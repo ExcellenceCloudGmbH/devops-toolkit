@@ -42,6 +42,10 @@ jobs:
         id: run-semgrep
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          # Force Semgrep to use the correct Repo Name and Reference
+          SEMGREP_REPO_NAME: ${{ github.repository }}
+          SEMGREP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          SEMGREP_COMMIT: ${{ github.sha }}
         run: |
           semgrep ci --json --output semgrep-results.json || true
 
@@ -58,6 +62,9 @@ jobs:
         if: inputs.isRepoPublic == false
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          SEMGREP_REPO_NAME: ${{ github.repository }}
+          SEMGREP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          SEMGREP_COMMIT: ${{ github.sha }}
         run: |
           semgrep ci --sarif --output semgrep.sarif || true
 
