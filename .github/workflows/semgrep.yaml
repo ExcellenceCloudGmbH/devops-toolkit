@@ -25,8 +25,6 @@ jobs:
     # We stay on ubuntu-latest (VM) to ensure 'checkout' and 'upload-artifact' work reliably,
     # but we use 'docker run' for the actual scanning tool.
     runs-on: ubuntu-latest
-    env:
-      SEMGREP_CLOUD_URL: https://semgrep.dev/orgs/excellence-cloud-gmbh/projects
 
     steps:
       - name: Checkout PR or branch
@@ -43,23 +41,25 @@ jobs:
       - name: Run Semgrep (JSON Output)
         id: run-semgrep
         env:
+           # Ensure this matches your GitHub Secret Name
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
-          # 1. Run Semgrep using the official Docker image
-          # We map current directory ($(pwd)) to /src inside the container
+          # 1. Debug check (Prints "Set" or "Empty", never the actual token)
+          if [ -z "$SEMGREP_APP_TOKEN" ]; then
+            echo "::error::SEMGREP_APP_TOKEN is missing from Secrets!"
+            exit 1
+          else
+            echo "Token is set. Proceeding..."
+          fi
+
+          # 2. Run Semgrep
           docker run --rm \
             -v "$(pwd):/src" \
+            -w /src \
             -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
-            -e SEMGREP_CLOUD_URL="$SEMGREP_CLOUD_URL" \
             returntocorp/semgrep \
             semgrep ci --json --output semgrep-results.json || true
 
-          # 2. Fix permissions (Docker creates files as root, we need runner ownership)
-          sudo chown -R $USER:$USER semgrep-results.json
-
-          # 3. Check results count (Existing Logic)
-          COUNT=$(jq '.results | length' semgrep-results.json)
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
       # IMPROVEMENT 1: Generate SARIF (Only if repo is PRIVATE)
       - name: Generate SARIF Report
@@ -67,16 +67,19 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
-          # We run a second pass for SARIF. 
-          # Note: We use --sarif flag. This allows GitHub Code Scanning integration.
           docker run --rm \
             -v "$(pwd):/src" \
+            -w /src \
             -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
             -e SEMGREP_CLOUD_URL="$SEMGREP_CLOUD_URL" \
             returntocorp/semgrep \
             semgrep ci --sarif --output semgrep.sarif || true
-            
-          sudo chown -R $USER:$USER semgrep.sarif
+          
+          if [ -f "semgrep.sarif" ]; then
+             sudo chown -R $USER:$USER semgrep.sarif
+          else
+             echo "::warning::SARIF generation failed. File not created."
+          fi
 
       # IMPROVEMENT 1: Upload SARIF to GitHub (Only if repo is PRIVATE)
       - name: Upload SARIF to GitHub Security Dashboard
