@@ -18,13 +18,12 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  security-events: write # Required to upload SARIF to GitHub
+  security-events: write
 
 jobs:
   semgrep:
-    # We stay on ubuntu-latest (VM) to ensure 'checkout' and 'upload-artifact' work reliably,
-    # but we use 'docker run' for the actual scanning tool.
     runs-on: ubuntu-latest
+    container: null
 
     steps:
       - name: Checkout PR or branch
@@ -33,61 +32,35 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
-      - name: Install jq and zip
+      - name: Install dependencies
         run: |
           sudo apt-get -qq update
-          sudo apt-get -y install jq zip
+          sudo apt-get -y install jq zip python3-pip
+          python3 -m pip install semgrep
 
       - name: Run Semgrep (JSON Output)
         id: run-semgrep
         env:
-           # Ensure this matches your GitHub Secret Name
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
-          # 1. Debug check (Prints "Set" or "Empty", never the actual token)
-          if [ -z "$SEMGREP_APP_TOKEN" ]; then
-            echo "::error::SEMGREP_APP_TOKEN is missing from Secrets!"
-            exit 1
+          semgrep ci --json --output semgrep-results.json || true
+
+          if [ -f "semgrep-results.json" ]; then
+             COUNT=$(jq '.results | length' semgrep-results.json)
           else
-            echo "Token is set. Proceeding..."
+             echo '{"results": []}' > semgrep-results.json
+             COUNT=0
           fi
+          
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
-          # 2. Run Semgrep
-          docker run --rm \
-            -v "$(pwd):/src" \
-            -w /src \
-            -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
-            returntocorp/semgrep \
-            semgrep ci --json --output semgrep-results.json || true
-
-
-      # IMPROVEMENT 1: Generate SARIF (Only if repo is PRIVATE)
       - name: Generate SARIF Report
         if: inputs.isRepoPublic == false
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         run: |
-          docker run --rm \
-            -v "$(pwd):/src" \
-            -w /src \
-            -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
-            -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-            -e GITHUB_REF="$GITHUB_REF" \
-            -e GITHUB_SHA="$GITHUB_SHA" \
-            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
-            -e GITHUB_RUN_ID="$GITHUB_RUN_ID" \
-            -e GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
-            -e GITHUB_HEAD_REF="$GITHUB_HEAD_REF" \
-            returntocorp/semgrep \
-            semgrep ci --json --output semgrep-results.json || true
-          
-          if [ -f "semgrep.sarif" ]; then
-             sudo chown -R $USER:$USER semgrep.sarif
-          else
-             echo "::warning::SARIF generation failed. File not created."
-          fi
+          semgrep ci --sarif --output semgrep.sarif || true
 
-      # IMPROVEMENT 1: Upload SARIF to GitHub (Only if repo is PRIVATE)
       - name: Upload SARIF to GitHub Security Dashboard
         if: inputs.isRepoPublic == false && steps.run-semgrep.outputs.count != '0'
         uses: github/codeql-action/upload-sarif@v3
@@ -97,7 +70,6 @@ jobs:
         continue-on-error: true
 
       - name: Comment on PR with Semgrep findings
-        # Logic maintained: Only run if PR + Issues Found + Not Public
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0' && !inputs.isRepoPublic
         uses: actions/github-script@v7
         with:
@@ -133,9 +105,7 @@ jobs:
 
       - name: Fail if Semgrep found High/Critical issues
         run: |
-          # Count findings where severity is ERROR (High/Critical) or explicitly CRITICAL
           high_issues=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "CRITICAL")] | length' semgrep-results.json)
-          
           echo "Semgrep found $high_issues High/Critical issue(s)"
           
           if [ "$high_issues" -gt 0 ]; then
@@ -151,13 +121,10 @@ jobs:
           ARTIFACT_PASS: ${{ secrets.ARTIFACT_PASSWORD }}
         run: |
           if [ ! -s semgrep-results.json ]; then
-             echo "::warning::semgrep-results.json is missing or empty (0 bytes). creating placeholder."
              echo '{"results": [], "error": "Scan failed to generate output"}' > semgrep-results.json
           fi
 
           if [ "$IS_PUBLIC" == "true" ]; then
-             echo "Public repo detected. Encrypting results..."
-             
              if [ -z "$ARTIFACT_PASS" ]; then
                echo "::error::Repo is public but ARTIFACT_PASSWORD secret is missing!"
                exit 1
@@ -172,11 +139,8 @@ jobs:
              
              echo "artifact_path=semgrep-results.zip" >> "$GITHUB_OUTPUT"
           else
-             echo "Private repo. Keeping raw JSON."
              echo "artifact_path=semgrep-results.json" >> "$GITHUB_OUTPUT"
           fi
-          
-          ls -lh semgrep-results*
 
       - name: Upload Semgrep results
         if: always()
