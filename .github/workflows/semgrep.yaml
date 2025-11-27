@@ -127,9 +127,15 @@ jobs:
 
       - name: Fail if Semgrep found High/Critical issues
         run: |
+          # Count findings where severity is ERROR (High/Critical) or explicitly CRITICAL
           high_issues=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "CRITICAL")] | length' semgrep-results.json)
+          
           echo "Semgrep found $high_issues High/Critical issue(s)"
-          [ "$high_issues" -eq 0 ] || { echo "Failing due to High/Critical Semgrep findings"; exit 1; }
+          
+          if [ "$high_issues" -gt 0 ]; then
+            echo "::error::Failing due to $high_issues High/Critical Semgrep findings."
+            exit 1
+          fi
 
       - name: Prepare Artifacts
         if: always()
