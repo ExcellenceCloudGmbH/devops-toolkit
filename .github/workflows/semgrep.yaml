@@ -71,9 +71,15 @@ jobs:
             -v "$(pwd):/src" \
             -w /src \
             -e SEMGREP_APP_TOKEN="$SEMGREP_APP_TOKEN" \
-            -e SEMGREP_CLOUD_URL="$SEMGREP_CLOUD_URL" \
+            -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            -e GITHUB_REF="$GITHUB_REF" \
+            -e GITHUB_SHA="$GITHUB_SHA" \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
+            -e GITHUB_RUN_ID="$GITHUB_RUN_ID" \
+            -e GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
+            -e GITHUB_HEAD_REF="$GITHUB_HEAD_REF" \
             returntocorp/semgrep \
-            semgrep ci --sarif --output semgrep.sarif || true
+            semgrep ci --json --output semgrep-results.json || true
           
           if [ -f "semgrep.sarif" ]; then
              sudo chown -R $USER:$USER semgrep.sarif
