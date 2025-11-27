@@ -38,15 +38,43 @@ jobs:
           sudo apt-get -y install jq zip python3-pip
           python3 -m pip install semgrep
 
-      - name: Run Semgrep and save JSON
+      - name: Run Semgrep (JSON Output)
         id: run-semgrep
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          # Force Semgrep to use the correct Repo Name and Reference
+          SEMGREP_REPO_NAME: ${{ github.repository }}
+          SEMGREP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          SEMGREP_COMMIT: ${{ github.sha }}
         run: |
-          semgrep ci --json > semgrep-results.json || true
+          semgrep ci --json --output semgrep-results.json || true
+
+          if [ -f "semgrep-results.json" ]; then
+             COUNT=$(jq '.results | length' semgrep-results.json)
+          else
+             echo '{"results": []}' > semgrep-results.json
+             COUNT=0
+          fi
           
-          COUNT=$(jq '.results | length' semgrep-results.json)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Generate SARIF Report
+        if: inputs.isRepoPublic == false
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          SEMGREP_REPO_NAME: ${{ github.repository }}
+          SEMGREP_BRANCH: ${{ github.head_ref || github.ref_name }}
+          SEMGREP_COMMIT: ${{ github.sha }}
+        run: |
+          semgrep ci --sarif --output semgrep.sarif || true
+
+      - name: Upload SARIF to GitHub Security Dashboard
+        if: inputs.isRepoPublic == false && steps.run-semgrep.outputs.count != '0'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+        continue-on-error: true
 
       - name: Comment on PR with Semgrep findings
         if: github.event_name == 'pull_request' && steps.run-semgrep.outputs.count != '0' && !inputs.isRepoPublic
