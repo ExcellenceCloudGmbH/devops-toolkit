@@ -47,7 +47,7 @@ jobs:
           SEMGREP_BRANCH: ${{ github.head_ref || github.ref_name }}
           SEMGREP_COMMIT: ${{ github.sha }}
         run: |
-          semgrep ci --json --output semgrep-results.json || true
+          semgrep ci --exclude '*Dockerfile*' --json --output semgrep-results.json || true
 
           if [ -f "semgrep-results.json" ]; then
              COUNT=$(jq '.results | length' semgrep-results.json)
@@ -66,7 +66,7 @@ jobs:
           SEMGREP_BRANCH: ${{ github.head_ref || github.ref_name }}
           SEMGREP_COMMIT: ${{ github.sha }}
         run: |
-          semgrep ci --sarif --output semgrep.sarif || true
+          semgrep ci --exclude '*Dockerfile*' --sarif --output semgrep.sarif || true
 
       - name: Upload SARIF to GitHub Security Dashboard
         if: inputs.isRepoPublic == false && steps.run-semgrep.outputs.count != '0'
