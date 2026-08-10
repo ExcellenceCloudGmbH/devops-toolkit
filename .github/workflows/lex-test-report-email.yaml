@@ -1,0 +1,217 @@
+name: Lex test report email
+
+on:
+  workflow_call:
+    inputs:
+      report_config_json:
+        description: "Inline JSON configuration describing groups and deliveries."
+        required: false
+        type: string
+        default: ""
+      report_config_path:
+        description: "Path to a JSON configuration file in the caller workspace or downloaded artifacts."
+        required: false
+        type: string
+        default: ""
+      download_artifacts:
+        description: "Download all artifacts from the current workflow run into .artifacts/ before resolving config and PDFs."
+        required: false
+        type: boolean
+        default: false
+      always_send:
+        description: "Send emails even when the reported overall status is failure."
+        required: false
+        type: boolean
+        default: true
+      upload_artifacts:
+        description: "Upload normalized config, render outputs, and send manifests."
+        required: false
+        type: boolean
+        default: true
+      send_dry_run:
+        description: "Validate rendered deliveries without calling Postmark."
+        required: false
+        type: boolean
+        default: false
+      fail_on_report_failure:
+        description: "Fail this workflow after delivery when the configuration reports a non-success overall status."
+        required: false
+        type: boolean
+        default: true
+      python_version:
+        description: "Python version used for rendering and delivery helpers."
+        required: false
+        type: string
+        default: "3.11"
+    secrets:
+      POSTMARK_SERVER_TOKEN:
+        required: false
+    outputs:
+      delivery_count:
+        description: "Number of resolved delivery batches."
+        value: ${{ jobs.send-report.outputs.delivery_count }}
+      sent_count:
+        description: "Number of email batches sent."
+        value: ${{ jobs.send-report.outputs.sent_count }}
+      overall_status:
+        description: "Normalized overall status from the report configuration."
+        value: ${{ jobs.send-report.outputs.overall_status }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    outputs:
+      delivery_count: ${{ steps.final_outputs.outputs.delivery_count }}
+      sent_count: ${{ steps.final_outputs.outputs.sent_count }}
+      overall_status: ${{ steps.final_outputs.outputs.overall_status }}
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
+
+      - name: Resolve toolkit repository reference
+        id: toolkit_source
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow_ref='${{ github.workflow_ref }}'
+          repository="${workflow_ref%%/.github/workflows/*}"
+          ref="${workflow_ref#*@}"
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout workflow source repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.toolkit_source.outputs.repository }}
+          ref: ${{ steps.toolkit_source.outputs.ref }}
+          path: .toolkit
+
+      - name: Resolve toolkit asset paths
+        id: toolkit_paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$GITHUB_WORKSPACE/.github/scripts/prepare_lex_email_payload.py" ]]; then
+            toolkit_dir="$GITHUB_WORKSPACE"
+          elif [[ -f "$GITHUB_WORKSPACE/.toolkit/.github/scripts/prepare_lex_email_payload.py" ]]; then
+            toolkit_dir="$GITHUB_WORKSPACE/.toolkit"
+          else
+            echo "::error::Could not find workflow helper scripts in workspace or .toolkit checkout."
+            exit 1
+          fi
+          echo "toolkit_dir=$toolkit_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Download run artifacts
+        if: inputs.download_artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: .artifacts
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcairo2-dev libffi-dev libgdk-pixbuf-2.0-0 \
+            libpango-1.0-0 libpangoft2-1.0-0 pkg-config shared-mime-info
+
+      - name: Install report dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install jinja2 requests weasyprint
+
+      - name: Normalize report configuration
+        id: prepare
+        env:
+          REPORT_CONFIG_JSON: ${{ inputs.report_config_json }}
+          REPORT_CONFIG_PATH: ${{ inputs.report_config_path }}
+        run: |
+          set -euo pipefail
+          mkdir -p .report-output
+          python "${{ steps.toolkit_paths.outputs.toolkit_dir }}/.github/scripts/prepare_lex_email_payload.py" \
+            --config-json "$REPORT_CONFIG_JSON" \
+            --config-path "$REPORT_CONFIG_PATH" \
+            --workspace "$GITHUB_WORKSPACE" \
+            --artifacts-dir "$GITHUB_WORKSPACE/.artifacts" \
+            --out "$GITHUB_WORKSPACE/.report-output/normalized-config.json"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          config = json.loads(Path(".report-output/normalized-config.json").read_text(encoding="utf-8"))
+          overall = config["overall_status"]
+          should_send = "true" if ("${{ inputs.always_send }}" == "true" or overall == "success") else "false"
+          print(f"overall_status={overall}")
+          print(f"delivery_count={len(config['deliveries'])}")
+          print(f"should_send={should_send}")
+          PY
+
+      - name: Render email and report artifacts
+        run: |
+          set -euo pipefail
+          python "${{ steps.toolkit_paths.outputs.toolkit_dir }}/.github/scripts/render_lex_test_report.py" \
+            --config "$GITHUB_WORKSPACE/.report-output/normalized-config.json" \
+            --template-dir "${{ steps.toolkit_paths.outputs.toolkit_dir }}/.github/templates/lex-test-report" \
+            --out-dir "$GITHUB_WORKSPACE/.report-output/rendered" \
+            --manifest-out "$GITHUB_WORKSPACE/.report-output/render-manifest.json"
+
+      - name: Upload rendered artifacts
+        if: always() && inputs.upload_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lex-test-report-email-assets
+          path: .report-output
+          retention-days: 7
+
+      - name: Send report emails
+        if: always() && steps.prepare.outputs.should_send == 'true'
+        env:
+          POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
+        run: |
+          set -euo pipefail
+          DRY_RUN_ARG=""
+          if [[ "${{ inputs.send_dry_run }}" == "true" ]]; then
+            DRY_RUN_ARG="--dry-run"
+          fi
+          python "${{ steps.toolkit_paths.outputs.toolkit_dir }}/.github/scripts/send_lex_report_email.py" \
+            --manifest "$GITHUB_WORKSPACE/.report-output/render-manifest.json" \
+            --out "$GITHUB_WORKSPACE/.report-output/send-results.json" \
+            $DRY_RUN_ARG
+
+      - name: Build workflow outputs
+        id: final_outputs
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          config_path = Path(".report-output/normalized-config.json")
+          if not config_path.exists():
+            print("overall_status=unknown")
+            print("delivery_count=0")
+            print("sent_count=0")
+            raise SystemExit(0)
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          send_results_path = Path(".report-output/send-results.json")
+          sent_count = 0
+          if send_results_path.exists():
+            sent_count = json.loads(send_results_path.read_text(encoding="utf-8")).get("sent_count", 0)
+          print(f"overall_status={config['overall_status']}")
+          print(f"delivery_count={len(config['deliveries'])}")
+          print(f"sent_count={sent_count}")
+          PY
+
+      - name: Fail on reported failure
+        if: always() && inputs.fail_on_report_failure && steps.prepare.outputs.overall_status != 'success'
+        run: |
+          echo "::error::The report configuration resolved to status '${{ steps.prepare.outputs.overall_status }}'."
+          exit 1

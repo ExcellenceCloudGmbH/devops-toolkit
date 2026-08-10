@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ delivery.report_title }}</title>
+    <style>
+      @page {
+        margin: 22mm 18mm;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        color: #1a2230;
+        font-size: 12px;
+        margin: 0;
+      }
+      h1, h2, h3, p {
+        margin: 0;
+      }
+      .brand-row {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .brand-mark {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        background: {{ config.branding.accent_color }};
+        color: {{ config.branding.logo_text_color }};
+        font-size: 20px;
+        font-weight: 700;
+        text-align: center;
+        line-height: 48px;
+      }
+      .page-header {
+        border-bottom: 2px solid {{ config.branding.primary_color }};
+        padding-bottom: 14px;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+        color: #5d6b7a;
+      }
+      .subtle {
+        color: #5d6b7a;
+      }
+      .status-pill {
+        display: inline-block;
+        margin-top: 12px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        font-size: 11px;
+        font-weight: 700;
+        color: #1a2230;
+      }
+      .summary-grid {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 10px 0;
+        margin: 18px -10px 0;
+      }
+      .summary-card {
+        border: 1px solid #dbe3ec;
+        border-top: 3px solid {{ config.branding.accent_color }};
+        background: #f8fafc;
+        padding: 12px;
+        width: 16%;
+      }
+      .summary-card .label {
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #5d6b7a;
+      }
+      .summary-card .value {
+        display: block;
+        margin-top: 8px;
+        font-size: 22px;
+        font-weight: 700;
+        color: #1a2230;
+      }
+      .section {
+        margin-top: 22px;
+      }
+      table.data,
+      table.test-table,
+      table.traceability-grid {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      table.data {
+        margin-top: 12px;
+      }
+      table.data th,
+      table.data td,
+      table.test-table th,
+      table.test-table td,
+      table.traceability-grid td {
+        border: 1px solid #dbe3ec;
+        padding: 8px 10px;
+        vertical-align: top;
+      }
+      table.data th,
+      table.test-table th {
+        background: #f5f7fb;
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #5d6b7a;
+        text-align: left;
+      }
+      .group-block {
+        margin-top: 18px;
+        border: 1px solid #dbe3ec;
+        border-left: 4px solid {{ config.branding.accent_color }};
+        padding: 14px;
+      }
+      .detail-row {
+        margin-top: 6px;
+      }
+      .notes {
+        margin: 10px 0 0 18px;
+        padding: 0;
+      }
+      .test-table {
+        margin-top: 12px;
+      }
+      .test-name {
+        font-weight: 700;
+      }
+      .test-meta {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #5d6b7a;
+      }
+      .accent-bar {
+        height: 4px;
+        background: {{ config.branding.accent_color }};
+        margin-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-header">
+      <table class="brand-row">
+        <tr>
+          <td style="width:220px;vertical-align:middle;">
+            {% if config.branding.logo_image_uri %}
+            <img src="{{ config.branding.logo_image_uri }}" alt="{{ config.branding.logo_alt or config.branding.name }}" style="display:block;height:48px;max-width:200px;width:auto;">
+            {% else %}
+            <div class="brand-mark">{{ config.branding.logo_text }}</div>
+            {% endif %}
+          </td>
+          <td style="vertical-align:middle;">
+            <div class="eyebrow">Lex test report</div>
+            <div style="margin-top:8px;font-size:20px;line-height:1.2;font-weight:700;color:{{ config.branding.primary_color }};">{{ config.branding.name }}</div>
+          </td>
+        </tr>
+      </table>
+      <div style="margin-top:18px;font-size:28px;line-height:1.2;font-weight:700;">{{ delivery.report_title }}</div>
+      <p class="subtle" style="margin-top:8px;line-height:1.5;">{{ delivery.subject_context }}</p>
+      {% if delivery.report.subtitle %}
+      <p class="subtle" style="margin-top:6px;line-height:1.5;">{{ delivery.report.subtitle }}</p>
+      {% endif %}
+      <div class="status-pill" style="color:{{ delivery.summary.status|status_tone }};border-color:{{ delivery.summary.status|status_tone }};">
+        {{ delivery.summary.status|status_badge }}
+      </div>
+      <p class="subtle" style="margin-top:10px;line-height:1.5;">Generated {{ config.generated_at|format_timestamp }}</p>
+      <div class="accent-bar"></div>
+    </div>
+
+    <table class="summary-grid">
+      <tr>
+        <td class="summary-card">
+          <span class="label">Groups</span>
+          <span class="value">{{ summary.group_count }}</span>
+        </td>
+        <td class="summary-card">
+          <span class="label">Tests</span>
+          <span class="value">{{ summary.counts.tests }}</span>
+        </td>
+        <td class="summary-card">
+          <span class="label">Passed</span>
+          <span class="value" style="color:#1b5e20;">{{ summary.counts.passed }}</span>
+        </td>
+        <td class="summary-card">
+          <span class="label">Failed</span>
+          <span class="value" style="color:#b91c1c;">{{ summary.counts.failed }}</span>
+        </td>
+        <td class="summary-card">
+          <span class="label">Errors</span>
+          <span class="value" style="color:#b91c1c;">{{ summary.counts.errors }}</span>
+        </td>
+        <td class="summary-card">
+          <span class="label">Coverage</span>
+          <span class="value">{{ coverage.display if coverage else "n/a" }}</span>
+        </td>
+      </tr>
+    </table>
+
+    <div class="section">
+      <h2 style="font-size:18px;">Group summary</h2>
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Group</th>
+            <th>Status</th>
+            <th>Tests</th>
+            <th>Passed</th>
+            <th>Failed</th>
+            <th>Skipped</th>
+            <th>Errors</th>
+            {% if has_group_coverage %}
+            <th>Coverage</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in groups %}
+          <tr>
+            <td>
+              <strong>{{ group.name }}</strong>
+              {% if group.description %}
+              <div class="subtle" style="margin-top:4px;">{{ group.description }}</div>
+              {% endif %}
+            </td>
+            <td style="color:{{ group.status|status_tone }};font-weight:700;">{{ group.status|status_badge }}</td>
+            <td>{{ group.counts.tests }}</td>
+            <td>{{ group.counts.passed }}</td>
+            <td>{{ group.counts.failed }}</td>
+            <td>{{ group.counts.skipped }}</td>
+            <td>{{ group.counts.errors }}</td>
+            {% if has_group_coverage %}
+            <td>{{ group.coverage.display if group.coverage else "n/a" }}</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% for group in groups %}
+    <div class="group-block">
+      <h2 style="font-size:16px;">{{ group.name }}</h2>
+      <div class="detail-row" style="color:{{ group.status|status_tone }};font-weight:700;">{{ group.status|status_badge }}</div>
+      {% if group.description %}
+      <div class="detail-row">{{ group.description }}</div>
+      {% endif %}
+      <div class="detail-row">
+        <strong>Counts:</strong>
+        {{ group.counts.tests }} tests,
+        {{ group.counts.passed }} passed,
+        {{ group.counts.failed }} failed,
+        {{ group.counts.skipped }} skipped,
+        {{ group.counts.errors }} errors.
+      </div>
+      {% if group.coverage %}
+      <div class="detail-row"><strong>{{ group.coverage.label }}:</strong> {{ group.coverage.display }}</div>
+      {% endif %}
+      {% if group.receivers %}
+      <div class="detail-row"><strong>Recipients:</strong> {{ group.receivers|join(", ") }}</div>
+      {% endif %}
+      {% if group.tests %}
+      <table class="test-table">
+        <thead>
+          <tr>
+            <th style="width:100px;">Status</th>
+            <th>Test</th>
+            <th style="width:90px;">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for test in group.tests %}
+          <tr>
+            <td style="color:{{ test.status|status_tone }};font-weight:700;">{{ test.status|status_badge }}</td>
+            <td>
+              <div class="test-name">{{ test.name }}</div>
+              {% if test.location %}
+              <div class="test-meta">{{ test.location }}</div>
+              {% endif %}
+              {% if test.details %}
+              <div class="test-meta">{{ test.details }}</div>
+              {% endif %}
+            </td>
+            <td>{{ test.duration or "-" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if config.traceability.duration or config.traceability.build_id or config.traceability.branch or config.traceability.run_url %}
+    <div class="section">
+      <h2 style="font-size:18px;">Traceability</h2>
+      <table class="traceability-grid" style="margin-top:10px;">
+        <tr>
+          <td><strong>Total run time:</strong> {{ config.traceability.duration or "n/a" }}</td>
+          <td><strong>Build identifier:</strong> {{ config.traceability.build_id or "n/a" }}</td>
+        </tr>
+        <tr>
+          <td><strong>Branch:</strong> {{ config.traceability.branch or "n/a" }}</td>
+          <td><strong>Run log:</strong> {{ config.traceability.run_url or "n/a" }}</td>
+        </tr>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if delivery.report.notes %}
+    <div class="section">
+      <h2 style="font-size:18px;">Notes</h2>
+      <ul class="notes">
+        {% for note in delivery.report.notes %}
+        <li style="margin-top:6px;">{{ note }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </body>
+</html>

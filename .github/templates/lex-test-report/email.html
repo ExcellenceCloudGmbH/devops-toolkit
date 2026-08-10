@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ subject }}</title>
+  </head>
+  <body style="margin:0;padding:0;background:{{ config.branding.surface_color }};color:#1a2230;font-family:Arial,sans-serif;">
+    {% set status = delivery.summary.status %}
+    {% set hero_bg = '#e8f5e9' if status == 'success' else '#fef2f2' if status in ['failure', 'error'] else '#f1f5f9' %}
+    {% set hero_tone = '#1b5e20' if status == 'success' else '#b91c1c' if status in ['failure', 'error'] else '#475569' %}
+    {% set hero_symbol = '✓' if status == 'success' else '×' if status == 'failure' else '!' if status == 'error' else '–' %}
+    <table role="presentation" style="width:100%;border-collapse:collapse;background:{{ config.branding.surface_color }};padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" style="width:100%;max-width:720px;border-collapse:collapse;background:#ffffff;border:1px solid #e2e5ec;border-radius:10px;overflow:hidden;">
+            <tr>
+              <td style="background:{{ config.branding.primary_color }};padding:26px 32px;color:#ffffff;">
+                <div style="font-size:11px;line-height:1;letter-spacing:2px;text-transform:uppercase;opacity:.70;">Lex test report</div>
+                <div style="margin-top:12px;">
+                  {% if config.branding.logo_image_uri %}
+                  <div style="display:inline-block;padding:10px 16px;border-radius:14px;background:#ffffff;border:1px solid rgba(15,23,42,.08);box-shadow:0 10px 24px rgba(15,23,42,.14);">
+                    <img src="{{ config.branding.logo_image_uri }}" alt="{{ config.branding.logo_alt or config.branding.name }}" style="display:block;width:228px;max-width:100%;height:auto;border:0;outline:0;">
+                  </div>
+                  {% else %}
+                  <div style="display:inline-block;padding:12px 16px;border-radius:14px;background:#ffffff;color:{{ config.branding.primary_color }};border:1px solid rgba(15,23,42,.08);box-shadow:0 10px 24px rgba(15,23,42,.14);font-size:24px;line-height:1;font-weight:700;">{{ config.branding.logo_text }}</div>
+                  {% endif %}
+                </div>
+                <div style="font-size:13px;line-height:1.4;margin-top:12px;opacity:.82;">
+                  <strong style="font-weight:600;">{{ config.branding.name }}</strong>
+                  &nbsp;&middot;&nbsp;
+                  Generated {{ config.generated_at|format_timestamp }}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="height:4px;background:{{ config.branding.accent_color }};line-height:0;font-size:0;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px;background:{{ hero_bg }};">
+                <table role="presentation" style="width:100%;border-collapse:collapse;">
+                  <tr>
+                    <td style="vertical-align:middle;width:60px;">
+                      <div style="width:52px;height:52px;border-radius:50%;background:{{ hero_tone }};color:#ffffff;font-size:28px;line-height:52px;font-weight:700;text-align:center;">{{ hero_symbol }}</div>
+                    </td>
+                    <td style="vertical-align:middle;padding-left:18px;">
+                      <div style="font-size:19px;line-height:1.25;font-weight:700;color:{{ hero_tone }};">
+                        {% if delivery.email.headline %}
+                        {{ delivery.email.headline }}
+                        {% elif status == 'success' %}
+                        All groups are working
+                        {% elif status in ['failure', 'error'] %}
+                        Some groups need attention
+                        {% elif status == 'warning' %}
+                        Run completed with skipped groups
+                        {% else %}
+                        No grouped tests were executed
+                        {% endif %}
+                      </div>
+                      <div style="font-size:13px;line-height:1.5;color:{{ hero_tone }};margin-top:4px;opacity:.85;">
+                        {% if delivery.email.intro %}
+                        {{ delivery.email.intro }}
+                        {% else %}
+                        {{ summary.groups_passed }} of {{ summary.group_count }} groups passing
+                        &nbsp;&middot;&nbsp;
+                        {{ summary.counts.tests }} tests executed
+                        {% if coverage %}
+                        &nbsp;&middot;&nbsp;
+                        overall coverage {{ coverage.display }}
+                        {% endif %}
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 16px 32px;">
+                <table role="presentation" style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #e2e5ec;border-radius:8px;overflow:hidden;">
+                  <thead>
+                    <tr>
+                      <th align="left" style="padding:12px 16px;background:#f5f7fb;border-bottom:1px solid #e2e5ec;font-size:11px;line-height:1;letter-spacing:1.2px;text-transform:uppercase;color:#5d6b7a;width:110px;">Status</th>
+                      <th align="left" style="padding:12px 16px;background:#f5f7fb;border-bottom:1px solid #e2e5ec;font-size:11px;line-height:1;letter-spacing:1.2px;text-transform:uppercase;color:#5d6b7a;">Group</th>
+                      <th align="left" style="padding:12px 16px;background:#f5f7fb;border-bottom:1px solid #e2e5ec;font-size:11px;line-height:1;letter-spacing:1.2px;text-transform:uppercase;color:#5d6b7a;width:130px;">Tests</th>
+                      {% if has_group_coverage %}
+                      <th align="left" style="padding:12px 16px;background:#f5f7fb;border-bottom:1px solid #e2e5ec;font-size:11px;line-height:1;letter-spacing:1.2px;text-transform:uppercase;color:#5d6b7a;width:130px;">Coverage</th>
+                      {% endif %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for group in groups %}
+                    {% set row_bg = '#ffffff' if loop.index0 % 2 == 0 else '#fafbfd' %}
+                    {% set pill_bg = '#e8f5e9' if group.status == 'success' else '#fef2f2' if group.status in ['failure', 'error'] else '#f1f5f9' %}
+                    {% set pill_tone = '#1b5e20' if group.status == 'success' else '#b91c1c' if group.status in ['failure', 'error'] else '#475569' %}
+                    <tr>
+                      <td style="padding:14px 16px;background:{{ row_bg }};border-bottom:1px solid #e2e5ec;vertical-align:top;">
+                        <span style="display:inline-block;padding:4px 10px;background:{{ pill_bg }};color:{{ pill_tone }};border:1px solid {{ pill_tone }};border-radius:999px;font-size:11px;line-height:1;font-weight:600;letter-spacing:.4px;white-space:nowrap;">
+                          {% if group.status == 'success' %}✓&nbsp; Passed{% elif group.status == 'failure' %}×&nbsp; Failed{% elif group.status == 'error' %}!&nbsp; Error{% elif group.status == 'warning' %}–&nbsp; Skipped{% else %}–&nbsp; No tests{% endif %}
+                        </span>
+                      </td>
+                      <td style="padding:14px 16px;background:{{ row_bg }};border-bottom:1px solid #e2e5ec;vertical-align:top;">
+                        <div style="font-size:14px;line-height:1.3;font-weight:600;color:#1a2230;">{{ group.name }}</div>
+                        {% if group.description %}
+                        <div style="font-size:12px;line-height:1.5;color:#5d6b7a;margin-top:3px;">{{ group.description }}</div>
+                        {% endif %}
+                      </td>
+                      <td style="padding:14px 16px;background:{{ row_bg }};border-bottom:1px solid #e2e5ec;vertical-align:top;">
+                        <div style="font-size:14px;line-height:1.3;font-weight:600;color:#1a2230;">{{ group.counts.tests }}</div>
+                      </td>
+                      {% if has_group_coverage %}
+                      <td style="padding:14px 16px;background:{{ row_bg }};border-bottom:1px solid #e2e5ec;vertical-align:top;">
+                        <div style="font-size:14px;line-height:1.3;font-weight:600;color:#1a2230;">{{ group.coverage.display if group.coverage else "-" }}</div>
+                      </td>
+                      {% endif %}
+                    </tr>
+                    {% endfor %}
+                    <tr>
+                      <td style="padding:14px 16px;background:#f5f7fb;border-top:2px solid #e2e5ec;font-size:11px;line-height:1;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;color:#283067;">Totals</td>
+                      <td style="padding:14px 16px;background:#f5f7fb;border-top:2px solid #e2e5ec;font-size:13px;line-height:1.4;font-weight:600;color:#1a2230;">
+                        {{ summary.groups_passed }} of {{ summary.group_count }} groups passing
+                        <div style="font-size:11px;line-height:1.5;color:#5d6b7a;margin-top:2px;">
+                          {% if config.traceability.duration %}
+                          Total run time {{ config.traceability.duration }}
+                          {% endif %}
+                          {% if coverage %}
+                          {% if config.traceability.duration %}&nbsp;&middot;&nbsp;{% endif %}
+                          {{ coverage.label }} <strong style="color:#1a2230;">{{ coverage.display }}</strong>
+                          {% endif %}
+                        </div>
+                      </td>
+                      <td style="padding:14px 16px;background:#f5f7fb;border-top:2px solid #e2e5ec;font-size:14px;line-height:1.3;font-weight:600;color:#1a2230;vertical-align:top;">{{ summary.counts.tests }}</td>
+                      {% if has_group_coverage %}
+                      <td style="padding:14px 16px;background:#f5f7fb;border-top:2px solid #e2e5ec;font-size:14px;line-height:1.3;font-weight:600;color:#1a2230;vertical-align:top;">{{ coverage.display if coverage else "-" }}</td>
+                      {% endif %}
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px 26px 32px;background:#f5f7fb;border-top:1px solid #e2e5ec;font-size:12px;line-height:1.6;color:#5d6b7a;">
+                <div style="margin-bottom:8px;font-weight:600;color:#1a2230;">Traceability</div>
+                {% if config.traceability.duration %}<div>Total run time: <strong style="color:#1a2230;">{{ config.traceability.duration }}</strong></div>{% endif %}
+                {% if config.traceability.build_id %}<div>Build identifier: <code style="font-size:12px;color:#1a2230;">{{ config.traceability.build_id }}</code></div>{% endif %}
+                {% if config.traceability.branch %}<div>Branch: {{ config.traceability.branch }}</div>{% endif %}
+                {% if config.traceability.run_url %}<div><a href="{{ config.traceability.run_url }}" style="color:{{ config.branding.primary_color }};text-decoration:underline;">View the full run log</a></div>{% endif %}
+                <div style="margin-top:10px;">The attached PDF contains the full report{% if coverage %}, including {{ coverage.label|lower }}{% endif %}.</div>
+                <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e2e5ec;color:#334155;">
+                  {% if delivery.email.outro %}
+                  {{ delivery.email.outro }}
+                  {% else %}
+                  This report was generated automatically after an automated test run. If anything is unclear, or if a group is marked as broken, please contact engineering.
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
