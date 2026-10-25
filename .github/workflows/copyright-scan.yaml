@@ -18,7 +18,9 @@ jobs:
       - name: Install ScanCode Toolkit
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install scancode-toolkit
+          # pluggy 1.7 no longer finds plugincode's hookspecs, so scancode
+          # crashes at import ("did not find any 'pre_scan' hooks").
+          pip install scancode-toolkit "pluggy<1.7"
 
       - name: Run ScanCode
         run: |
